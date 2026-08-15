@@ -1,0 +1,13 @@
+# InsightBrief 依赖清单 (Ver0.1.0)
+# 安装: pip install -r requirements.txt
+# curl_cffi == 0.16.0
+pydantic==2.13.4
+parsel==1.11.0
+tenacity==9.1.4
+curl_cffi==0.16.0
+requests==2.32.5
+deep-translator==1.11.4
+playwright==1.62.0
+
+# 注: 首次安装后需下载浏览器内核 (供 CSR 站点渲染抓取):
+#   python -m playwright install chromium
