@@ -2,6 +2,13 @@
 
 > 多源新闻智能抓取与翻译阅读 CLI —— **Ver0.1.0**
 
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License](https://img.shields.io/badge/license-Apache_2.0-green)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+![Source Count](https://img.shields.io/badge/sources-26-orange)
+![Crawlers](https://img.shields.io/badge/crawlers-25-grey)
+
 选择媒体即抓取最新新闻:中文直显,外文自动翻译成简体中文。
 
 ## 特性
