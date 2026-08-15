@@ -18,10 +18,11 @@ from Core import (
     NewsMetaInfo,
     RequestHeaders as BaseRequestHeaders,
 )
+from Config.config import platform_config
 from Core.fetchers import CurlCffiFetcher, FetchRequest
 
 # BBC不需要登录态，使用标准User-Agent即可
-FIXED_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+FIXED_USER_AGENT = platform_config("bbc")["user_agent"]
 FIXED_COOKIE = ''
 
 
@@ -56,7 +57,7 @@ class BBCNewsCrawler(BaseNewsCrawler):
         Returns:
             str: 新闻详情页基础url
         """
-        return "https://www.bbc.com"
+        return platform_config("bbc")["base_url"]
 
     def get_article_id(self) -> str:
         """获取新闻详情页文章id
@@ -229,7 +230,7 @@ class BBCNewsCrawler(BaseNewsCrawler):
 if __name__ == "__main__":
     # Test URL
     article_url = "https://www.bbc.com/news/articles/c797qlx93j0o"
-    crawler = BBCNewsCrawler(article_url, save_path="data/")
+    crawler = BBCNewsCrawler(article_url)
     result = crawler.run()
     print(f"Successfully crawled: {result.title}")
     print(f"Author: {result.meta_info.author_name}")

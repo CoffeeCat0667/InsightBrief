@@ -2,6 +2,27 @@
 
 本仓库所有值得记录的变更均按时间倒序记录于此。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Ver0.1.1] - 2026-08-15
+
+配置抽取重构:硬编码配置收归 `Config/` 目录,全平台全源改由唯一加载器供给。
+
+### 变更
+
+- **配置数据与加载器统一入 `Config/`**:`Core.json`(代理/UA/超时重试/路径/playwright/generic 阈值)、`Clawer.json`(25 平台 base_url/xpath/UA/fetch 策略覆盖)、`Services.json`(27 源注册表 + translator 参数)、`config.py`(唯一加载器:lru_cache、必填校验、`CRAWL_PROXY` 等 env 覆盖)
+- 加载器从 `Core/config.py` 迁至 `Config/config.py`,全仓配置引用统一为 `from Config.config import ...`,不再从 `Core.fetchers` re-export
+- 25 个平台爬虫类属性(含 4 个自定义平台的 UA 与 `get_base_url`)改由 `platform_config(pid)` 注入
+- `Services/discovery.py` 源注册表(platform_patterns/link_patterns/sources/domestic_source_ids)全部改由配置构建;CNN 首页内嵌 JSON 提取保留为代码 custom 源
+- `Services/translator.py` 翻译 provider/source/target/chunk_size 配置化
+
+### 修复
+
+- Ars Technica 直连返回 HTTP 202 反爬质询页时不再直接失败:非 200 状态码同样触发一次代理回退(代理可取得完整正文)
+
+### 验证
+
+- 全量 26 平台真实抓取 26/26 通过(合计 235s);25 平台 import/属性一致性校验通过
+- 端点:新华网 116 链接、guardian RSS 45 条、bbc_rss 33 条(www.bbc.co.uk→www.bbc.com 替换生效)、arstechnica 202→代理回退成功
+
 ## [Ver0.1.0] - 2026-08-15
 
 首个可运行版本发布。

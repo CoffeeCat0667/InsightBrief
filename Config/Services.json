@@ -1,0 +1,254 @@
+{
+  "translator": {
+    "provider": "google",
+    "source": "auto",
+    "target": "zh-CN",
+    "chunk_size": 1500
+  },
+  "discovery": {
+    "platform_patterns": {
+      "netease": "https?://www\\.163\\.com/(news|dy)/article/",
+      "sohu": "https?://www\\.sohu\\.com/a/",
+      "bbc": "https?://www\\.bbc\\.com/news/articles/",
+      "cnn": "https?://(edition\\.|www\\.)?cnn\\.com/\\d{4}/\\d{2}/\\d{2}/",
+      "apnews": "https?://apnews\\.com/",
+      "guardian": "https?://(?:www\\.)?theguardian\\.com/",
+      "nytimes": "https?://(?:www\\.|cn\\.)?nytimes\\.com/(?:[a-z-]+/)?\\d{4,8}/",
+      "aljazeera": "https?://(?:www\\.)?aljazeera\\.com/",
+      "dw": "https?://(?:www\\.)?dw\\.com/",
+      "npr": "https?://(?:www\\.)?npr\\.org/\\d{4}/",
+      "washingtonpost": "https?://(?:www\\.)?washingtonpost\\.com/",
+      "cnbc": "https?://(?:www\\.)?cnbc\\.com/\\d{4}/",
+      "forbes": "https?://(?:www\\.)?forbes\\.com/",
+      "fortune": "https?://fortune\\.com/",
+      "businessinsider": "https?://(?:www\\.)?businessinsider\\.com/",
+      "marketwatch": "https?://(?:www\\.)?marketwatch\\.com/story/",
+      "techcrunch": "https?://techcrunch\\.com/\\d{4}/",
+      "theverge": "https?://(?:www\\.)?theverge\\.com/(?:[a-z0-9-]+/)?\\d{4,}/",
+      "wired": "https?://(?:www\\.)?wired\\.com/story/",
+      "arstechnica": "https?://arstechnica\\.com/",
+      "zdnet": "https?://(?:www\\.)?zdnet\\.com/article/",
+      "engadget": "https?://(?:www\\.)?engadget\\.com/\\d+/",
+      "venturebeat": "https?://venturebeat\\.com/",
+      "xinhua": "https?://www\\.news\\.cn/[a-z]+/2\\d{7}/",
+      "people": "https?://[a-z]+\\.people\\.com\\.cn/n\\d/\\d{4}/\\d{4}/",
+      "jfjb": "https?://www\\.81\\.cn/[a-z0-9_]+/\\d+\\.html"
+    },
+    "link_patterns": {
+      "netease": "https?://www\\.163\\.com/(?:news|dy)/article/[^\"'<>\\s?#]+",
+      "sohu": "(?:https?:)?//(?:www\\.)?sohu\\.com/a/\\d+[^\"'<>\\s?#]*",
+      "bbc": "https?://www\\.bbc\\.com/news/articles/[^\"'<>\\s?#]+",
+      "cnn": "(?:https?:)?//(?:www\\.|edition\\.)?cnn\\.com/\\d{4}/\\d{2}/\\d{2}/[^\"'<>\\s?#]+\\.html",
+      "apnews": "https?://apnews\\.com/article/[^\"'<>\\s?#]+",
+      "xinhua": "https?://www\\.news\\.cn/[a-z]+/2\\d{7}/[A-Za-z0-9_\\-\\.]+/c\\.html",
+      "people": "https?://[a-z]+\\.people\\.com\\.cn/n\\d/\\d{4}/\\d{4}/c\\d+-\\d+\\.html",
+      "jfjb": "https?://www\\.81\\.cn/[a-z0-9_]+/\\d+\\.html"
+    },
+    "sources": [
+      {
+        "id": "bbc_rss",
+        "name": "BBC News (RSS)",
+        "kind": "rss",
+        "feeds": [
+          "https://feeds.bbci.co.uk/news/world/rss.xml",
+          "https://feeds.bbci.co.uk/news/technology/rss.xml"
+        ],
+        "url_replace": ["www.bbc.co.uk", "www.bbc.com"],
+        "platform_ids": ["bbc"]
+      },
+      {
+        "id": "bbc_china",
+        "name": "BBC News · 中国专题",
+        "kind": "rss",
+        "feeds": ["https://feeds.bbci.co.uk/news/world/asia/china/rss.xml"],
+        "url_replace": ["www.bbc.co.uk", "www.bbc.com"],
+        "skip_substrings": ["/videos/"],
+        "platform_ids": ["bbc"]
+      },
+      {
+        "id": "netease_domestic",
+        "name": "网易新闻·国内",
+        "kind": "column",
+        "column_url": "https://news.163.com/domestic/",
+        "link_pattern": "netease",
+        "platform_ids": ["netease"]
+      },
+      {
+        "id": "sohu_news",
+        "name": "搜狐新闻",
+        "kind": "column",
+        "column_url": "https://news.sohu.com/",
+        "link_pattern": "sohu",
+        "platform_ids": ["sohu"]
+      },
+      {
+        "id": "cnn_home",
+        "name": "CNN News (首页)",
+        "kind": "custom",
+        "platform_ids": ["cnn"]
+      },
+      {
+        "id": "xinhua",
+        "name": "新华网",
+        "kind": "column",
+        "column_url": "https://www.news.cn/",
+        "link_pattern": "xinhua",
+        "platform_ids": ["xinhua"]
+      },
+      {
+        "id": "people",
+        "name": "人民网(人民日报)",
+        "kind": "column",
+        "column_url": "http://www.people.com.cn/",
+        "link_pattern": "people",
+        "platform_ids": ["people"]
+      },
+      {
+        "id": "jfjb",
+        "name": "解放军报(中国军网)",
+        "kind": "column",
+        "column_url": "http://www.81.cn/",
+        "link_pattern": "jfjb",
+        "platform_ids": ["jfjb"]
+      },
+      {
+        "id": "apnews",
+        "name": "AP News",
+        "kind": "column",
+        "column_url": "https://apnews.com/",
+        "link_pattern": "apnews",
+        "platform_ids": ["apnews"]
+      },
+      {
+        "id": "guardian",
+        "name": "The Guardian",
+        "kind": "rss",
+        "feeds": ["https://www.theguardian.com/world/rss"],
+        "platform_ids": ["guardian"]
+      },
+      {
+        "id": "nytimes",
+        "name": "The New York Times",
+        "kind": "rss",
+        "feeds": ["https://quanwenrss.com/nytime"],
+        "platform_ids": ["nytimes"]
+      },
+      {
+        "id": "aljazeera",
+        "name": "Al Jazeera",
+        "kind": "rss",
+        "feeds": ["https://www.aljazeera.com/xml/rss/all.xml"],
+        "platform_ids": ["aljazeera"]
+      },
+      {
+        "id": "dw",
+        "name": "Deutsche Welle",
+        "kind": "rss",
+        "feeds": ["https://rss.dw.com/rdf/rss-en-all"],
+        "platform_ids": ["dw"]
+      },
+      {
+        "id": "npr",
+        "name": "NPR",
+        "kind": "rss",
+        "feeds": ["https://feeds.npr.org/1001/rss.xml"],
+        "platform_ids": ["npr"]
+      },
+      {
+        "id": "washingtonpost",
+        "name": "The Washington Post",
+        "kind": "rss",
+        "feeds": ["https://feeds.washingtonpost.com/rss/world"],
+        "platform_ids": ["washingtonpost"]
+      },
+      {
+        "id": "cnbc",
+        "name": "CNBC",
+        "kind": "rss",
+        "feeds": ["https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114"],
+        "platform_ids": ["cnbc"]
+      },
+      {
+        "id": "forbes",
+        "name": "Forbes",
+        "kind": "rss",
+        "feeds": [
+          "https://www.forbes.com/innovation/feed/",
+          "https://www.forbes.com/business/feed/"
+        ],
+        "platform_ids": ["forbes"]
+      },
+      {
+        "id": "fortune",
+        "name": "Fortune",
+        "kind": "rss",
+        "feeds": ["https://fortune.com/feed/"],
+        "platform_ids": ["fortune"]
+      },
+      {
+        "id": "businessinsider",
+        "name": "Business Insider",
+        "kind": "rss",
+        "feeds": ["https://www.businessinsider.com/rss"],
+        "platform_ids": ["businessinsider"]
+      },
+      {
+        "id": "marketwatch",
+        "name": "MarketWatch",
+        "kind": "rss",
+        "feeds": ["https://feeds.content.dowjones.io/public/rss/mw_topstories"],
+        "platform_ids": ["marketwatch"]
+      },
+      {
+        "id": "techcrunch",
+        "name": "TechCrunch",
+        "kind": "rss",
+        "feeds": ["https://techcrunch.com/feed/"],
+        "platform_ids": ["techcrunch"]
+      },
+      {
+        "id": "theverge",
+        "name": "The Verge",
+        "kind": "rss",
+        "feeds": ["https://www.theverge.com/rss/index.xml"],
+        "platform_ids": ["theverge"]
+      },
+      {
+        "id": "wired",
+        "name": "WIRED",
+        "kind": "rss",
+        "feeds": ["https://www.wired.com/feed/rss"],
+        "platform_ids": ["wired"]
+      },
+      {
+        "id": "arstechnica",
+        "name": "Ars Technica",
+        "kind": "rss",
+        "feeds": ["https://feeds.arstechnica.com/arstechnica/index"],
+        "platform_ids": ["arstechnica"]
+      },
+      {
+        "id": "zdnet",
+        "name": "ZDNet",
+        "kind": "rss",
+        "feeds": ["https://www.zdnet.com/news/rss.xml"],
+        "platform_ids": ["zdnet"]
+      },
+      {
+        "id": "engadget",
+        "name": "Engadget",
+        "kind": "rss",
+        "feeds": ["https://www.engadget.com/rss.xml"],
+        "platform_ids": ["engadget"]
+      },
+      {
+        "id": "venturebeat",
+        "name": "VentureBeat",
+        "kind": "rss",
+        "feeds": ["https://venturebeat.com/feed/"],
+        "platform_ids": ["venturebeat"]
+      }
+    ],
+    "domestic_source_ids": ["netease_domestic", "sohu_news", "xinhua", "people", "jfjb"]
+  }
+}

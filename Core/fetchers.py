@@ -2,26 +2,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Callable, Mapping, MutableMapping, Optional, Protocol
 
+from Config.config import core_config, get_proxy_config  # noqa: E402
+
 logger = logging.getLogger(__name__)
-
-# 默认代理地址; 可通过环境变量 CRAWL_PROXY 覆盖, 设为空串可禁用代理 fallback
-DEFAULT_PROXY = "http://127.0.0.1:7897"
-
-
-def get_proxy_config() -> Optional[Mapping[str, str]]:
-    """读取代理配置 (环境变量 CRAWL_PROXY, 默认 http://127.0.0.1:7897)。
-
-    返回 {"http": proxy, "https": proxy} 供 requests/curl_cffi 使用;
-    环境变量为空串时返回 None, 表示完全禁用代理。
-    """
-    proxy = os.environ.get("CRAWL_PROXY", DEFAULT_PROXY).strip()
-    if not proxy:
-        return None
-    return {"http": proxy, "https": proxy}
 
 
 @dataclass
@@ -31,7 +17,9 @@ class FetchRequest:
     url: str
     method: str = "GET"
     headers: Mapping[str, str] | None = None
-    timeout: float = 10.0
+    timeout: float = field(
+        default_factory=lambda: core_config()["fetch"]["request_timeout"]
+    )
     allow_redirects: bool = True
     impersonate: Optional[str] = None
     params: Mapping[str, str] | None = None
@@ -54,7 +42,7 @@ def _fetch_with_fallback(
     expected_errors: tuple,
     proxies: Optional[Mapping[str, str]],
 ) -> object:
-    """执行请求: 直连失败且配置了代理时自动用代理重试一次。
+    """执行请求: 直连失败 (异常或非 200, 如 202 反爬质询) 且配置了代理时自动用代理重试一次。
 
     Args:
         make_request: 无参调用, 返回响应对象 (初次直连)
@@ -74,7 +62,19 @@ def _fetch_with_fallback(
         )
         response = retry_with_proxies(proxies)
     if getattr(response, "status_code") != 200:
-        raise RuntimeError(f"Failed to fetch content: {getattr(response, 'status_code')}")
+        if proxies is None:
+            raise RuntimeError(
+                f"Failed to fetch content: {getattr(response, 'status_code')}"
+            )
+        logger.info(
+            "Direct fetch status %s, retrying via proxy %s",
+            getattr(response, "status_code"),
+            proxies["https"],
+        )
+        response = retry_with_proxies(proxies)
+    status = getattr(response, "status_code")
+    if status != 200:
+        raise RuntimeError(f"Failed to fetch content: {status}")
     return response
 
 
@@ -134,9 +134,9 @@ class PlaywrightFetcher(FetchStrategy):
     资源型请求 (图片/视频/字体) 会被 拦截以加快页面加载。
     """
 
-    launch_timeout: float = 40.0
-    page_timeout: float = 40.0
-    settle_ms: int = 1200
+    launch_timeout: float = core_config()["playwright"]["launch_timeout"]
+    page_timeout: float = core_config()["playwright"]["page_timeout"]
+    settle_ms: int = core_config()["playwright"]["settle_ms"]
 
     _playwright = None
     _browser = None

@@ -3,12 +3,16 @@
 
 from parsel import Selector
 
+from Config.config import platform_config
 from Core.generic import GenericArticleCrawler
 
 
+_CFG = platform_config("people")
+
+
 class PeopleNewsCrawler(GenericArticleCrawler):
-    base_url = "http://www.people.com.cn"
-    content_xpath = '//*[@id="rm_txt_zw"]'
+    base_url = _CFG["base_url"]
+    content_xpath = _CFG.get("content_xpath", "")
 
     def parse_html_to_news_meta(self, html_content: str):
         meta = super().parse_html_to_news_meta(html_content)

@@ -18,10 +18,11 @@ from Core import (
     NewsMetaInfo,
     RequestHeaders as BaseRequestHeaders,
 )
+from Config.config import platform_config
 from Core.fetchers import CurlCffiFetcher, FetchRequest
 
 ## 网易的cookies不需要登录态，随便打开一个网易新闻提取cookies即可
-FIXED_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+FIXED_USER_AGENT = platform_config("netease")["user_agent"]
 FIXED_COOKIE = ''
 
 
@@ -56,7 +57,7 @@ class NeteaseNewsCrawler(BaseNewsCrawler):
         Returns:
             str: 新闻详情页基础url
         """
-        return "https://www.163.com"
+        return platform_config("netease")["base_url"]
 
     def get_article_id(self) -> str:
         """获取新闻详情页文章id
@@ -179,7 +180,7 @@ class NeteaseNewsCrawler(BaseNewsCrawler):
 if __name__ == "__main__":
     # Test URL
     article_url = "https://www.163.com/news/article/KC12OUHK000189FH.html"
-    crawler = NeteaseNewsCrawler(article_url, save_path="data/")
+    crawler = NeteaseNewsCrawler(article_url)
     result = crawler.run()
     print(f"Successfully crawled: {result.title}")
     print(f"Text paragraphs: {len(result.texts)}")

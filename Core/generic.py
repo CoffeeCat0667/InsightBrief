@@ -20,8 +20,11 @@ from typing import Any, Dict, List, Optional
 from parsel import Selector
 
 from .base import BaseNewsCrawler
+from Config.config import core_config
 from .fetchers import CurlCffiFetcher, FetchRequest
 from .models import ContentItem, ContentType, NewsItem, NewsMetaInfo
+
+_SAVE_DIR = core_config()["paths"]["save_dir"]
 
 _ARTICLE_TYPES = ("NewsArticle", "ReportageNewsArticle", "Article", "BlogPosting")
 _TEXT_TAGS = ("p", "h2", "h3", "h4", "li", "blockquote", "pre")
@@ -41,10 +44,10 @@ class GenericArticleCrawler(BaseNewsCrawler):
     base_url: str = ""
     content_xpath: str = ""            # 正文容器 XPath, 空则自动探测 article/main
     block_xpath: str = ""              # 正文块 XPath (如 div.article-paragraph), 空则用默认标签集
-    min_paragraph_chars: int = 30      # 短于该字符数的段落视为噪声忽略
-    min_content_chars: int = 150       # 容器提取文本不足则回退 JSON-LD articleBody
+    min_paragraph_chars: int = core_config()["generic"]["min_paragraph_chars"]
+    min_content_chars: int = core_config()["generic"]["min_content_chars"]
 
-    def __init__(self, new_url: str, save_path: str = "data/", headers=None, fetcher=None):
+    def __init__(self, new_url: str, save_path: str = _SAVE_DIR, headers=None, fetcher=None):
         super().__init__(new_url, save_path, headers=headers, fetcher=fetcher)
 
     # ---------------------------------------------------------------------- #
@@ -64,8 +67,8 @@ class GenericArticleCrawler(BaseNewsCrawler):
 
     def build_fetch_request(self) -> FetchRequest:
         request = super().build_fetch_request()
-        request.impersonate = "chrome"
-        request.timeout = 20.0
+        request.impersonate = core_config()["fetch"]["generic_impersonate"]
+        request.timeout = core_config()["fetch"]["generic_timeout"]
         return request
 
     # ---------------------------------------------------------------------- #

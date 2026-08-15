@@ -18,10 +18,11 @@ from Core import (
     NewsMetaInfo,
     RequestHeaders as BaseRequestHeaders,
 )
+from Config.config import platform_config
 from Core.fetchers import CurlCffiFetcher, FetchRequest
 
 ## 搜狐的cookies不需要登录态，随便打开一个搜狐新闻提取cookies即可
-FIXED_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+FIXED_USER_AGENT = platform_config("sohu")["user_agent"]
 FIXED_COOKIE = ''
 
 
@@ -56,7 +57,7 @@ class SohuNewsCrawler(BaseNewsCrawler):
         Returns:
             str: 新闻详情页基础url
         """
-        return "https://www.sohu.com"
+        return platform_config("sohu")["base_url"]
 
     def get_article_id(self) -> str:
         """获取新闻详情页文章id
@@ -248,7 +249,7 @@ class SohuNewsCrawler(BaseNewsCrawler):
 if __name__ == "__main__":
     # Test URL
     article_url = "https://www.sohu.com/a/945014338_160447"
-    crawler = SohuNewsCrawler(article_url, save_path="data/")
+    crawler = SohuNewsCrawler(article_url)
     result = crawler.run()
     print(f"Successfully crawled: {result.title}")
     print(f"Author: {result.meta_info.author_name}")

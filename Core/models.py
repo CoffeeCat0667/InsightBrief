@@ -7,12 +7,9 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from pydantic.config import ConfigDict
 
+from Config.config import core_config
 
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
+DEFAULT_USER_AGENT = core_config()["user_agent"]
 
 
 class RequestHeaders(BaseModel):

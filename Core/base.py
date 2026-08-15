@@ -9,13 +9,16 @@ from typing import Optional, Type
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
+from Config.config import core_config, get_proxy_config
 from .fetchers import (
     CurlCffiFetcher,
     FetchRequest,
     FetchStrategy,
-    get_proxy_config,
 )
 from .models import ContentItem, NewsItem, NewsMetaInfo, RequestHeaders
+
+_FETCH = core_config()["fetch"]
+_SAVE_DIR = core_config()["paths"]["save_dir"]
 
 
 class BaseNewsCrawler(ABC):
@@ -28,15 +31,15 @@ class BaseNewsCrawler(ABC):
 
     headers_model: Type[RequestHeaders] = RequestHeaders
     fetch_strategy: Type[FetchStrategy] = CurlCffiFetcher
-    fetch_attempts: int = 3
-    fetch_wait_seconds: float = 1.0
-    fetch_timeout: float = 15.0
+    fetch_attempts: int = _FETCH["attempts"]
+    fetch_wait_seconds: float = _FETCH["wait_seconds"]
+    fetch_timeout: float = _FETCH["timeout"]
     persist_by_default: bool = True
 
     def __init__(
         self,
         new_url: str,
-        save_path: str = "data/",
+        save_path: str = _SAVE_DIR,
         headers: Optional[RequestHeaders] = None,
         fetcher: Optional[FetchStrategy] = None,
     ):

@@ -18,10 +18,11 @@ from Core import (
     NewsMetaInfo,
     RequestHeaders as BaseRequestHeaders,
 )
+from Config.config import platform_config
 from Core.fetchers import CurlCffiFetcher, FetchRequest
 
 # CNN不需要登录态，使用标准User-Agent即可
-FIXED_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+FIXED_USER_AGENT = platform_config("cnn")["user_agent"]
 FIXED_COOKIE = ''
 
 
@@ -56,7 +57,7 @@ class CNNNewsCrawler(BaseNewsCrawler):
         Returns:
             str: 新闻详情页基础url
         """
-        return "https://edition.cnn.com"
+        return platform_config("cnn")["base_url"]
 
     def get_article_id(self) -> str:
         """获取新闻详情页文章id
@@ -204,7 +205,7 @@ class CNNNewsCrawler(BaseNewsCrawler):
 if __name__ == "__main__":
     # Test URL
     article_url = "https://edition.cnn.com/2025/10/27/uk/sami-hamdi-detained-ice-intl"
-    crawler = CNNNewsCrawler(article_url, save_path="data/")
+    crawler = CNNNewsCrawler(article_url)
     result = crawler.run()
     print(f"Successfully crawled: {result.title}")
     print(f"Author: {result.meta_info.author_name}")

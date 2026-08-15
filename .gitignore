@@ -26,3 +26,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local session memory & planning docs (not part of the published repo)
+CONTEXT.md
+DEPENDENCIES.md
+GAP_ANALYSIS.md

@@ -1,0 +1,33 @@
+{
+  "proxy": {
+    "default": "http://127.0.0.1:7897",
+    "env_var": "CRAWL_PROXY"
+  },
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "fetch": {
+    "attempts": 3,
+    "wait_seconds": 1.0,
+    "timeout": 15.0,
+    "request_timeout": 10.0,
+    "generic_timeout": 20.0,
+    "generic_impersonate": "chrome"
+  },
+  "playwright": {
+    "launch_timeout": 40.0,
+    "page_timeout": 40.0,
+    "settle_ms": 1200
+  },
+  "paths": {
+    "save_dir": "data/"
+  },
+  "generic": {
+    "min_paragraph_chars": 30,
+    "min_content_chars": 150
+  },
+  "discovery": {
+    "timeout": 15.0,
+    "retry_delay": 1.0,
+    "retry_via_proxy": true,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  }
+}

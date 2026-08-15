@@ -8,9 +8,11 @@ from __future__ import annotations
 import logging
 import re
 
-from Core.fetchers import get_proxy_config
+from Config.config import get_proxy_config, services_config
 
 logger = logging.getLogger(__name__)
+
+_TRANSLATOR_CFG = services_config()["translator"]
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\uF900-\uFAFF]")
 
@@ -42,9 +44,9 @@ def _chunk_paragraphs(text: str, size: int) -> list[str]:
 
 
 class Translator:
-    """延迟加载 deep_translator, 目标语言固定为简体中文。"""
+    """延迟加载 deep_translator, 目标语言固定为简体中文 (配置可调)。"""
 
-    def __init__(self, chunk_size: int = 1500):
+    def __init__(self, chunk_size: int = _TRANSLATOR_CFG["chunk_size"]):
         self._client = None
         self._chunk_size = chunk_size
 
@@ -53,7 +55,9 @@ class Translator:
             from deep_translator import GoogleTranslator
 
             self._client = GoogleTranslator(
-                source="auto", target="zh-CN", proxies=get_proxy_config()
+                source=_TRANSLATOR_CFG["source"],
+                target=_TRANSLATOR_CFG["target"],
+                proxies=get_proxy_config(),
             )
         return self._client
 
