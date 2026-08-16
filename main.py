@@ -14,7 +14,7 @@ import sys
 from collections import OrderedDict
 
 from Core.base import BaseNewsCrawler
-from Services.discovery import SOURCES, discover_links
+from Services.discovery import SOURCES, discover_links, ensure_sources_loaded
 from Services.translator import Translator, is_chinese
 
 CATEGORY_LABELS = {
@@ -62,6 +62,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 def build_menu() -> OrderedDict:
     """扫描 Clawer 分类目录, 构建 平台 -> (分类标签, 源 id, 媒体名) 菜单。"""
+    ensure_sources_loaded()
     menu: OrderedDict = OrderedDict()
     clawer = os.path.join(PROJECT_ROOT, "Clawer")
     for cat in sorted(os.listdir(clawer)):

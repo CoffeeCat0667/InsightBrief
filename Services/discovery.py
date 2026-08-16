@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
@@ -305,29 +306,47 @@ def _build_sources_from_rows(rows) -> Dict[str, NewsSource]:
 
 
 def _load_sources_from_db() -> None:
-    """首次调用时从 DB sources 表构建注册表 (仅启用源)。"""
-    global SOURCES, DOMESTIC_SOURCE_IDS
+    """首次调用时从 DB sources 表构建注册表 (仅启用源)。
+
+    **原地更新** (clear + update) 而非重新绑定: 保持模块级 SOURCES /
+    DOMESTIC_SOURCE_IDS 对象身份不变, 使 `from ... import SOURCES` 的既有
+    引用方在懒加载完成后同样能看到 27 源 (修复 CLI 菜单空回归)。
+    """
     from Services.App.db import SessionLocal
     from Services.App.models import Source
     from sqlalchemy import select
 
     with SessionLocal() as session:
         rows = list(session.scalars(select(Source).where(Source.enabled.is_(True))).all())
-        SOURCES = _build_sources_from_rows(rows)
-        DOMESTIC_SOURCE_IDS = {row.id for row in rows if row.is_domestic}
+    SOURCES.clear()
+    SOURCES.update(_build_sources_from_rows(rows))
+    DOMESTIC_SOURCE_IDS.clear()
+    DOMESTIC_SOURCE_IDS.update({row.id for row in rows if row.is_domestic})
 
 
 SOURCES: Dict[str, NewsSource] = {}
 DOMESTIC_SOURCE_IDS: set = set()
 _sources_loaded = False
+_load_lock = threading.Lock()
 
 
-def _ensure_sources_loaded() -> None:
-    """懒加载入口: import 时不连库, 首次读源才构建。"""
+def ensure_sources_loaded() -> None:
+    """懒加载入口: import 时不连库, 首次读源才构建 (线程安全)。
+
+    调用方: 需要在模块级 SOURCES/DOMESTIC_SOURCE_IDS 构建完成后才能
+    继续的业务 (如 CLI main.build_menu) 显式调用; get_source/is_domestic
+    内部已自动触发。
+    """
     global _sources_loaded
-    if not _sources_loaded:
-        _load_sources_from_db()
-        _sources_loaded = True
+    if _sources_loaded:
+        return
+    with _load_lock:
+        if not _sources_loaded:
+            _load_sources_from_db()
+            _sources_loaded = True
+
+# 内部兼容别名 (旧代码引用)
+_ensure_sources_loaded = ensure_sources_loaded
 
 
 def is_domestic(source_id: str) -> bool:
