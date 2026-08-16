@@ -168,16 +168,26 @@ def main() -> int:
         return 0
 
     changed = 0
+    skipped = 0
     for pid in ids:
-        suggested = results[pid][2]
-        if platforms[pid].get("fetch_timeout") != suggested:
-            platforms[pid]["fetch_timeout"] = suggested
+        seconds, _status, suggested = results[pid]
+        if seconds is None:
+            # FAIL/SKIP: 无实测依据, 不覆盖已调优值, 保持原值
+            skipped += 1
+            continue
+        entry = platforms.get(pid)
+        if entry is None:
+            # --platform 拼错/未知平台: 跳过, 不写不崩
+            skipped += 1
+            continue
+        if entry.get("fetch_timeout") != suggested:
+            entry["fetch_timeout"] = suggested
             changed += 1
     FLAWER_JSON.write_text(
         json.dumps({"platforms": platforms}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"写回完成: {changed} 个平台值已更新 (共 {total} 个)。")
+    print(f"写回完成: {changed} 个平台值已更新, {skipped} 个失败/跳过保持原值 (共 {total} 个)。")
     return 0
 
 
