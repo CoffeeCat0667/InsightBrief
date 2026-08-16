@@ -13,6 +13,11 @@ import os
 import sys
 from collections import OrderedDict
 
+# 项目根 = Services/CLI 的上两级; 先入 sys.path 保证 import 在任何调用方式下可解析
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from Core.base import BaseNewsCrawler
 from Services.discovery import SOURCES, discover_links, ensure_sources_loaded
 from Services.translator import Translator, is_chinese
@@ -54,8 +59,7 @@ MEDIA_CN_NAMES = {
     "venturebeat": "VentureBeat",
 }
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-
+# 项目根 = Services/CLI 的上两级 (兼容: python -m Services.CLI.main 或 python Services/CLI/main.py)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 

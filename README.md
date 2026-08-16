@@ -23,7 +23,8 @@
 
 ```
 InsightBrief/
-├── main.py                     # CLI 主程序入口(菜单 1-26, 仍可用)
+├── Services/
+│   ├── CLI/main.py             # CLI 主程序入口 (python -m Services.CLI.main, 菜单 1-26)
 ├── Core/                       # 抓取核心(fetchers / base / generic / models)
 ├── Clawer/                     # 各平台爬虫 (按类别分组, 25 平台薄子类)
 ├── Services/
@@ -69,7 +70,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 
 - 交互 API 文档: http://127.0.0.1:8000/docs
 - 初始管理员: `ADMIN_USERNAME`/`ADMIN_PASSWORD` 环境变量, 默认 `admin` / `admin123456`(生产必须配置 `JWT_SECRET`)
-- CLI 仍可用: `python main.py`(菜单输入媒体编号抓取最新一条)
+- CLI 仍可用: `python -m Services.CLI.main` 或 `python Services/CLI/main.py`(菜单输入媒体编号抓取最新一条)
 
 ## API 概览
 
