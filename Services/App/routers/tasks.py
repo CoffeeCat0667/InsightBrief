@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
@@ -28,28 +28,36 @@ def create_crawl_task(
     session: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
-    """创建抓取任务 (人工触发); 与进行中任务源集合有交集时拒绝 (409)。"""
-    if body.source_ids:
-        ids = [s for s in body.source_ids if s]
-        duplicates = [
-            t
-            for t in session.scalars(
-                select(CrawlTask).where(
-                    CrawlTask.status.in_(
-                        [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]
-                    )
+    """创建抓取任务 (人工触发); 与进行中任务源集合有交集时拒绝 (409)。
+
+    源集合重叠语义: source_ids 省略/空 = 全部启用源 (全集); 全集与任何
+    非空集合必重叠, 因此两边任一方为全集即视为冲突。
+    """
+    ids = [s for s in body.source_ids if s] if body.source_ids else []
+    duplicates = [
+        t
+        for t in session.scalars(
+            select(CrawlTask).where(
+                CrawlTask.status.in_(
+                    [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]
                 )
-            ).all()
-            if t.source_ids and set(t.source_ids) & set(ids)
-        ]
-        if duplicates:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "conflict",
-                    "message": f"源 {ids} 已在任务 {duplicates[0].id} 中抓取中",
-                },
             )
+        ).all()
+        if not t.source_ids or not ids or set(t.source_ids) & set(ids)
+    ]
+    if duplicates:
+        existing = duplicates[0]
+        message = (
+            f"全部源抓取已在进行中 (任务 {existing.id})"
+            if not ids
+            else f"源 {ids} 已在任务 {existing.id} 中抓取中"
+            if existing.source_ids and set(existing.source_ids) & set(ids)
+            else f"源集合与进行中任务 {existing.id} (全源) 重叠"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "conflict", "message": message},
+        )
     task = CrawlTask(
         user_id=user.id,
         status=TaskStatus.PENDING.value,
@@ -75,7 +83,10 @@ def list_crawl_tasks(
     stmt = select(CrawlTask)
     if status:
         stmt = stmt.where(CrawlTask.status == status)
-    total = len(session.scalars(stmt).all())
+    total = (
+        session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))
+        or 0
+    )
     rows = (
         session.scalars(
             stmt.order_by(CrawlTask.id.desc())
@@ -136,7 +147,10 @@ async def task_event_stream(
     session: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """SSE 进度通道: 先重放 Redis/内存历史事件, 再订阅实时事件 (15s 心跳)。"""
+    """SSE 进度通道: 先订阅再重放历史事件 (避免重放与订阅之间的丢事件
+    窗口 — 重放循环的 await 让出事件循环时 publish 的事件, 既不在
+    重放列表、也未入订阅队列而永久丢失); seq <= last_seq 去重兜底。
+    """
     task = session.get(CrawlTask, task_id)
     if task is None:
         raise HTTPException(
@@ -156,18 +170,19 @@ async def task_event_stream(
     async def generate():
         try:
             yield ": connected\n\n"
-            last_seq = 0
-            for ev in manager.replay_events(task_id):
-                last_seq = max(last_seq, ev.get("seq") or 0)
-                if await request.is_disconnected():
-                    return
-                yield fmt(ev)
-                if ev.get("event") in TERMINAL_EVENTS:
-                    return
-            if not active:
-                return
+            # 先订阅: 重放期间的实时事件进入订阅队列, 由 seq 去重兜住
             queue = manager.subscribe(task_id)
             try:
+                last_seq = 0
+                for ev in manager.replay_events(task_id):
+                    last_seq = max(last_seq, ev.get("seq") or 0)
+                    if await request.is_disconnected():
+                        return
+                    yield fmt(ev)
+                    if ev.get("event") in TERMINAL_EVENTS:
+                        return
+                if not active:
+                    return
                 while True:
                     try:
                         ev = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)

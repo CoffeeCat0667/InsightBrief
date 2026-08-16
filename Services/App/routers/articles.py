@@ -53,8 +53,14 @@ def _page_of(session: Session, stmt, page: int, page_size: int):
         .all()
     )
     items = [ArticleListItem.model_validate(r) for r in rows]
-    for item in items:
-        item.source_name = _source_name(session, item.source_id)
+    if items:
+        ids = {item.source_id for item in items}
+        names = {
+            s.id: s.name
+            for s in session.scalars(select(Source).where(Source.id.in_(ids))).all()
+        }
+        for item in items:
+            item.source_name = names.get(item.source_id, item.source_id)
     return Page[ArticleListItem](
         items=items, total=total, page=page, page_size=page_size
     )

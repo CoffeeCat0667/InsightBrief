@@ -29,16 +29,6 @@ class CrawlTaskCreate(BaseModel):
     max_items: int = 30
 
 
-class TaskEvent(BaseModel):
-    """SSE 进度事件 (GET /api/tasks/{id}/events 推送负载)。"""
-
-    task_id: int
-    event: str
-    data: Dict[str, Any]
-    seq: int
-    ts: str
-
-
 class CrawlRunRead(BaseModel):
     """抓取任务的逐源运行明细。"""
 

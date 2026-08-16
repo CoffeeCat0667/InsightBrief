@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -48,11 +49,17 @@ async def lifespan(app: FastAPI):
     manager.shutdown()
 
 
+# 生产环境用 IB_DISABLE_DOCS=1 关闭交互文档 (仅暴露业务 API)
+_docs_enabled = os.environ.get("IB_DISABLE_DOCS", "").lower() not in {"1", "true", "yes"}
+
 app = FastAPI(
     title="InsightBrief API",
     version="0.1.2",
     description="新闻抓取/翻译/简报 Web 后端",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 app.add_middleware(

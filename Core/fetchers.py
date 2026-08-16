@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import queue
+import threading
 from dataclasses import dataclass, field
 from typing import Callable, Mapping, MutableMapping, Optional, Protocol
 
@@ -131,12 +133,21 @@ class PlaywrightFetcher(FetchStrategy):
 
     复用单一 chromium 实例与 BrowserContext, 每次 fetch 只开新 page,
     等待页面完成渲染后取回真实 DOM 的 HTML, 再交给现有解析逻辑。
-    资源型请求 (图片/视频/字体) 会被 拦截以加快页面加载。
+    资源型请求 (图片/视频/字体) 会被拦截以加快页面加载。
+
+    **线程模型**: playwright sync API 的调度 fiber 绑定创建线程, 跨线程
+    调用 (即使串行) 会抛 "cannot switch to a different thread"。因此所有
+    浏览器操作通过队列投递到**唯一专用线程**执行 (任务并发
+    ThreadPoolExecutor(4) 下安全; 请求串行排队, 天然互斥)。
     """
 
     launch_timeout: float = core_config()["playwright"]["launch_timeout"]
     page_timeout: float = core_config()["playwright"]["page_timeout"]
     settle_ms: int = core_config()["playwright"]["settle_ms"]
+
+    _pw_thread: Optional[threading.Thread] = None
+    _pw_queue: Optional["queue.Queue"] = None
+    _pw_start_lock = threading.Lock()
 
     _playwright = None
     _browser = None
@@ -144,10 +155,49 @@ class PlaywrightFetcher(FetchStrategy):
     _context_proxies: Optional[Mapping[str, str]] = None
 
     @classmethod
+    def _submit(cls, fn) -> object:
+        """把 fn 投递到 playwright 专用线程执行并同步等待结果 (异常重抛)。"""
+        cls._ensure_thread()
+        result_q: queue.Queue = queue.Queue()
+        cls._pw_queue.put((fn, result_q))
+        ok, value = result_q.get()
+        if not ok:
+            raise value
+        return value
+
+    @classmethod
+    def _ensure_thread(cls) -> None:
+        if cls._pw_thread is not None:
+            return
+        with cls._pw_start_lock:
+            if cls._pw_thread is not None:
+                return
+            cls._pw_queue = queue.Queue()
+            cls._pw_thread = threading.Thread(
+                target=cls._pw_loop,
+                name="insightbrief-playwright",
+                daemon=True,
+            )
+            cls._pw_thread.start()
+
+    @classmethod
+    def _pw_loop(cls) -> None:
+        """专用线程主循环: 本线程内创建/操作 playwright, 永不退出。"""
+        while True:
+            fn, result_q = cls._pw_queue.get()
+            if fn is None:
+                return
+            try:
+                result_q.put((True, fn()))
+            except BaseException as exc:  # 捕获后回传调用线程重抛, 不中断循环
+                result_q.put((False, exc))
+
+    @classmethod
     def _ensure_browser(cls, proxies: Optional[Mapping[str, str]]) -> None:
+        """(仅在 playwright 专用线程内调用) 惰性启动浏览器。"""
         if cls._browser is not None and cls._context_proxies == proxies:
             return
-        cls.close()
+        cls._close_browser()
         from playwright.sync_api import sync_playwright  # 按需加载, 不污染冷启动
 
         cls._playwright = sync_playwright().start()
@@ -167,8 +217,8 @@ class PlaywrightFetcher(FetchStrategy):
         cls._context_proxies = proxies
 
     @classmethod
-    def close(cls) -> None:
-        """释放浏览器资源 (进程退出前可选调用)。"""
+    def _close_browser(cls) -> None:
+        """(仅在 playwright 专用线程内调用) 释放浏览器资源。"""
         if cls._playwright is None:
             return
         try:
@@ -184,7 +234,26 @@ class PlaywrightFetcher(FetchStrategy):
                 cls._context = None
                 cls._context_proxies = None
 
+    @classmethod
+    def close(cls) -> None:
+        """停止专用线程并释放浏览器 (幂等; 进程退出前可选调用)。"""
+        if cls._pw_thread is None:
+            return
+        try:
+            cls._submit(cls._close_browser)
+        except Exception:  # 线程可能已终止, 忽略并强制清理
+            pass
+        with cls._pw_start_lock:
+            if cls._pw_queue is not None:
+                cls._pw_queue.put(None)
+            cls._pw_thread = None
+            cls._pw_queue = None
+
     def fetch(self, request: FetchRequest) -> str:
+        return self._submit(lambda: self._fetch_on_pw_thread(request))
+
+    def _fetch_on_pw_thread(self, request: FetchRequest) -> str:
+        """(仅在 playwright 专用线程内调用) 单次页面抓取。"""
         proxies = request.proxies or get_proxy_config()
         self._ensure_browser(proxies)
         assert self._playwright and self._context  # pragma: no cover - guard for type checkers

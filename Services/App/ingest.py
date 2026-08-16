@@ -11,6 +11,7 @@ import hashlib
 import importlib
 import inspect
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -97,6 +98,7 @@ def upsert_article(
         publish_time=meta.publish_time or "",
         content="\n".join(news_item.texts) or None,
         language=meta.extra.get("language") if isinstance(meta.extra, dict) else None,
+        crawled_at=datetime.now(),
     )
     if news_item.contents:
         article.contents = [
