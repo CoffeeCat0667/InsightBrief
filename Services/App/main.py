@@ -10,13 +10,11 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from .db import SessionLocal
 from .routers import articles, auth, briefs, sources, tasks
@@ -58,7 +56,7 @@ _docs_enabled = os.environ.get("IB_DISABLE_DOCS", "").lower() not in {"1", "true
 
 app = FastAPI(
     title="InsightBrief API",
-    version="0.2.0",
+    version="0.1.2",
     description="新闻抓取/翻译/简报 Web 后端",
     lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,
@@ -130,7 +128,3 @@ app.include_router(tasks.router)
 app.include_router(tasks.events_router)
 app.include_router(briefs.router)
 app.include_router(briefs.briefs_router)
-
-# 单页前端 (静态目录挂根路径; /api/* 路由已先注册, 优先匹配)
-_static_dir = Path(__file__).resolve().parent / "static"
-app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
