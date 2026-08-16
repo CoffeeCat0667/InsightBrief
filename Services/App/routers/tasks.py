@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""抓取任务端点: 创建/列表/详情/取消 + SSE 进度事件流。"""
+"""抓取任务端点: 创建/列表/详情/取消 + SSE 进度事件流。
+
+SSE 按任务类型独立端点 (消除 id 双表歧义):
+- GET /api/tasks/{id}/events           → crawl 任务
+- GET /api/brief-tasks/{id}/events     → brief 任务 (见 briefs.py)
+"""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
-from ..models import BriefTask, CrawlTask, User
+from ..models import CrawlTask, User
 from ..schemas import CrawlTaskCreate, CrawlTaskRead, Page, PageParams, TaskCancelRead, TaskCancelRequest, ok
 from ..schemas.task import TaskStatus
 from ..security import get_current_user, require_admin
@@ -20,6 +25,67 @@ from ..task_manager import _HEARTBEAT_SECONDS, _TERMINAL, manager
 
 router = APIRouter(prefix="/api/crawl-tasks", tags=["crawl-tasks"])
 events_router = APIRouter(prefix="/api/tasks", tags=["crawl-tasks"])
+
+TERMINAL_EVENTS = {
+    "task_completed",
+    "task_failed",
+    "task_cancelled",
+    "brief_completed",
+    "brief_failed",
+    "brief_cancelled",
+}
+
+
+async def _event_stream(
+    task_id: int,
+    kind: str,
+    active: bool,
+    request: Request,
+):
+    """SSE 进度通道: 先订阅再重放历史事件 (避免重放与订阅之间的丢事件
+    窗口 — 重放循环的 await 让出事件循环时 publish 的事件, 既不在
+    重放列表、也未入订阅队列而永久丢失); seq <= last_seq 去重兜底。
+    """
+    def fmt(ev: dict) -> str:
+        return (
+            f"event: {ev['event']}\n"
+            f"data: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+        )
+
+    try:
+        yield ": connected\n\n"
+        queue = manager.subscribe(task_id, kind=kind)
+        try:
+            last_seq = 0
+            for ev in manager.replay_events(task_id, kind=kind):
+                last_seq = max(last_seq, ev.get("seq") or 0)
+                if await request.is_disconnected():
+                    return
+                yield fmt(ev)
+                if ev.get("event") in TERMINAL_EVENTS:
+                    return
+            if not active:
+                return
+            while True:
+                try:
+                    ev = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        return
+                    yield ": ping\n\n"
+                    continue
+                if (ev.get("seq") or 0) <= last_seq:
+                    continue
+                if await request.is_disconnected():
+                    return
+                yield fmt(ev)
+                if ev.get("event") in TERMINAL_EVENTS:
+                    return
+                last_seq = ev.get("seq") or 0
+        finally:
+            manager.unsubscribe(task_id, queue, kind=kind)
+    except asyncio.CancelledError:
+        pass
 
 
 @router.post("")
@@ -34,6 +100,14 @@ def create_crawl_task(
     非空集合必重叠, 因此两边任一方为全集即视为冲突。
     """
     ids = [s for s in body.source_ids if s] if body.source_ids else []
+    if body.source_ids is not None and ids != body.source_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "message": "source_ids 含空字符串",
+            },
+        )
     duplicates = [
         t
         for t in session.scalars(
@@ -147,73 +221,16 @@ async def task_event_stream(
     session: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """SSE 进度通道: 先订阅再重放历史事件 (避免重放与订阅之间的丢事件
-    窗口 — 重放循环的 await 让出事件循环时 publish 的事件, 既不在
-    重放列表、也未入订阅队列而永久丢失); seq <= last_seq 去重兜底。
-    """
-    task = session.get(CrawlTask, task_id) or session.get(BriefTask, task_id)
+    """crawl 任务 SSE 进度通道 (brief 任务请用 /api/brief-tasks/{id}/events)。"""
+    task = session.get(CrawlTask, task_id)
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": f"任务 {task_id} 不存在"},
         )
-    kind = "brief" if isinstance(task, BriefTask) else "crawl"
-    active = task.status not in _TERMINAL or manager.is_active(task_id, kind=kind)
-
-    TERMINAL_EVENTS = {
-        "task_completed",
-        "task_failed",
-        "task_cancelled",
-        "brief_completed",
-        "brief_failed",
-        "brief_cancelled",
-    }
-
-    def fmt(ev: dict) -> str:
-        return (
-            f"event: {ev['event']}\n"
-            f"data: {json.dumps(ev['data'], ensure_ascii=False)}\n\n"
-        )
-
-    async def generate():
-        try:
-            yield ": connected\n\n"
-            # 先订阅: 重放期间的实时事件进入订阅队列, 由 seq 去重兜住
-            queue = manager.subscribe(task_id, kind=kind)
-            try:
-                last_seq = 0
-                for ev in manager.replay_events(task_id, kind=kind):
-                    last_seq = max(last_seq, ev.get("seq") or 0)
-                    if await request.is_disconnected():
-                        return
-                    yield fmt(ev)
-                    if ev.get("event") in TERMINAL_EVENTS:
-                        return
-                if not active:
-                    return
-                while True:
-                    try:
-                        ev = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)
-                    except asyncio.TimeoutError:
-                        if await request.is_disconnected():
-                            return
-                        yield ": ping\n\n"
-                        continue
-                    if (ev.get("seq") or 0) <= last_seq:
-                        continue
-                    if await request.is_disconnected():
-                        return
-                    yield fmt(ev)
-                    if ev.get("event") in TERMINAL_EVENTS:
-                        return
-                    last_seq = ev.get("seq") or 0
-            finally:
-                manager.unsubscribe(task_id, queue, kind=kind)
-        except asyncio.CancelledError:
-            pass
-
+    active = task.status not in _TERMINAL or manager.is_active(task_id, kind="crawl")
     return StreamingResponse(
-        generate(),
+        _event_stream(task_id, "crawl", active, request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

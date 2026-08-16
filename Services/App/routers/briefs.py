@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""简报端点: 创建/列表/详情/取消 + GET /api/briefs。
+"""简报端点: 创建/列表/详情/取消 + SSE 进度 + GET /api/briefs。
 
-SSE 进度沿用 /api/tasks/{task_id}/events (同 event bus, TERMINAL_EVENTS
-已含 brief_* 终态); 简报任务允许并发 (决策 §15-4), 无 409 语义。
+SSE 独立端点 GET /api/brief-tasks/{id}/events (与 crawl 的
+/api/tasks/{id}/events 分开 — 两表 id 各自自增, 合并端点会歧义)。
+简报任务允许并发 (决策 §15-4), 无 409 语义。
 """
 from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -30,6 +32,7 @@ from ..schemas import (
 from ..schemas.task import TaskStatus
 from ..security import get_current_user, require_admin
 from ..task_manager import _TERMINAL, manager
+from .tasks import _event_stream
 
 router = APIRouter(prefix="/api/brief-tasks", tags=["brief-tasks"])
 briefs_router = APIRouter(prefix="/api/briefs", tags=["briefs"])
@@ -42,6 +45,16 @@ def create_brief_task(
     user: User = Depends(require_admin),
 ):
     """创建简报生成任务 (对现有文章做 LLM 分类/摘要/综述, 人工触发)。"""
+    if body.source_ids is not None:
+        cleaned = [s for s in body.source_ids if s]
+        if cleaned != body.source_ids:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "validation_error",
+                    "message": "source_ids 含空字符串",
+                },
+            )
     task = BriefTask(
         user_id=user.id,
         status=TaskStatus.PENDING.value,
@@ -124,6 +137,32 @@ def cancel_brief_task(
         )
     return ok(
         TaskCancelRead(task_id=task_id, task_status=task.status, requested=False)
+    )
+
+
+@router.get("/{task_id}/events")
+async def brief_task_event_stream(
+    task_id: int,
+    request: Request,
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """brief 任务 SSE 进度通道 (与 crawl 端点分离, 消除 id 歧义)。"""
+    task = session.get(BriefTask, task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": f"简报任务 {task_id} 不存在"},
+        )
+    active = task.status not in _TERMINAL or manager.is_active(task_id, kind="brief")
+    return StreamingResponse(
+        _event_stream(task_id, "brief", active, request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

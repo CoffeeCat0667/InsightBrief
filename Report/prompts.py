@@ -115,7 +115,11 @@ def extract_json(raw: str) -> Any:
 
 
 def parse_classify(raw: str, valid: List[str]) -> Dict[int, str]:
-    """解析批分类结果 -> {idx: category}; 非法类别归一为 '其他'。"""
+    """解析批分类结果 -> {idx: category}; 非法类别归一为 '其他'。
+
+    idx 非数字 (如 "0.0") 的条目直接跳过 — 视为缺项, 由调用方的缺项
+    检查判定 bad_response, 走二分拆批/单篇降级路径 (不炸任务)。
+    """
     data = extract_json(raw)
     if not isinstance(data, dict) or not isinstance(data.get("articles"), list):
         raise LLMServiceError(
@@ -125,9 +129,12 @@ def parse_classify(raw: str, valid: List[str]) -> Dict[int, str]:
     for entry in data["articles"]:
         if not isinstance(entry, dict):
             continue
-        idx = entry.get("idx")
+        try:
+            idx = int(entry.get("idx"))
+        except (TypeError, ValueError):
+            continue
         cat = str(entry.get("category") or "").strip()
-        result[int(idx)] = cat if cat in valid else "其他"
+        result[idx] = cat if cat in valid else "其他"
     return result
 
 

@@ -45,9 +45,12 @@ CATEGORY_CN_EN = {
 CATEGORY_EN_CN = {v: k for k, v in CATEGORY_CN_EN.items()}
 CATEGORY_EN_VALUES = frozenset(CATEGORY_CN_EN.values())
 CATEGORY_OTHER = "other"
+# 综述等 LLM 展示用映射: other -> 中文 "其他"
+CATEGORY_LABEL = {CATEGORY_OTHER: "其他", **CATEGORY_EN_CN}
 
 DEFAULT_QUARANTINE = 3
 DEFAULT_CONCURRENCY = 4
+DEFAULT_MAX_BATCH = 20
 
 _SERVICE_TYPES = ("timeout", "rate_limited", "connection", "http_error", "bad_response")
 
@@ -86,7 +89,6 @@ class BriefProcessor:
     def __init__(self) -> None:
         self._manager = None
         self._task_id: Optional[int] = None
-        self._classify = ClassifyOperator(batch_size=20)
         self._summarize = SummarizeOperator()
         self._translate_title = TranslateTitleOperator()
         self._overview = ComposeOverviewOperator()
@@ -146,12 +148,23 @@ class BriefProcessor:
             return
 
         llm_cfg = self._llm_cfg()
+        operators_cfg = llm_cfg.get("operators") or {}
+        classify_cfg = operators_cfg.get("classify") or {}
+        summarize_cfg = operators_cfg.get("summarize") or {}
+        translate_cfg = operators_cfg.get("translate_title") or {}
+        overview_cfg = operators_cfg.get("compose_overview") or {}
         ctx = OperatorContext(
             provider,
             categories=list(CATEGORY_CN_EN),
             emit=lambda *_a, **_k: None,
             cancel_check=lambda: self._cancel_requested(),
             stats=stats,
+            summarize_max_tokens=int(summarize_cfg.get("max_tokens") or 0) or None,
+            translate_title_max_tokens=int(translate_cfg.get("max_tokens") or 0) or None,
+            overview_max_tokens=int(overview_cfg.get("max_tokens") or 0) or None,
+        )
+        classify = ClassifyOperator(
+            batch_size=int(classify_cfg.get("max_batch") or 0) or DEFAULT_MAX_BATCH
         )
         guard = _Guard(
             int(llm_cfg.get("quarantine_consecutive", DEFAULT_QUARANTINE))
@@ -163,7 +176,7 @@ class BriefProcessor:
             {"idx": i, "article": a, "title": a.title, "text": self._article_text(a)}
             for i, a in enumerate(articles)
         ]
-        idx_cat = self._classify(ctx, items)
+        idx_cat = classify(ctx, items)
         for it in items:
             it["category"] = CATEGORY_CN_EN.get(
                 idx_cat.get(it["idx"]), CATEGORY_OTHER
@@ -262,7 +275,7 @@ class BriefProcessor:
         try:
             title, overview = self._overview(
                 ctx,
-                CATEGORY_EN_CN.get(cat, cat),
+                CATEGORY_LABEL.get(cat, cat),
                 [
                     {"title": it.get("title_cn") or it["title"], "summary": it.get("summary")}
                     for it in group
@@ -413,9 +426,21 @@ class BriefProcessor:
         items: List[Dict[str, Any]],
         stats: Dict[str, Any],
     ) -> None:
-        from Services.App.models import Article
+        """落库简报 + 文章回写。
+
+        全挂语义 (用户拍板): 全部服务级降级时任务 failed, 但已产出的
+        残料 (briefs/items/回写) **保留** — 与取消 (半成品不落库) 区分。
+        """
+        from Services.App.models import Article, Source
 
         with _session() as session:
+            # source_id -> 真实源名 (S6: source_name 列存真名而非裸 id)
+            source_names = {
+                sid: name
+                for sid, name in session.execute(
+                    select(Source.id, Source.name)
+                ).all()
+            }
             task = session.get(_brief_task_model(), task_id)
             if task is None:
                 return
@@ -478,7 +503,8 @@ class BriefProcessor:
                             category=it["category"]
                             if it["category"] in CATEGORY_EN_VALUES
                             else None,
-                            source_name=it["article"].source_id,
+                            source_name=source_names.get(it["article"].source_id)
+                            or it["article"].source_id,
                             url=it["article"].url,
                             meta=meta,
                         )

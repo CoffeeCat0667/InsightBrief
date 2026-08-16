@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .article import ArticleCategory
 from .task import TaskStatus
@@ -18,6 +18,7 @@ class BriefTaskCreate(BaseModel):
     source_ids: Optional[List[str]] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    max_items: Optional[int] = Field(default=None, ge=1, le=500)  # 文章上限 (最新优先)
 
 
 class BriefTaskRead(BaseModel):
@@ -40,7 +41,7 @@ class BriefTaskRead(BaseModel):
 
 
 class BriefItemRead(BaseModel):
-    """简报条目。"""
+    """简报条目 (meta 携带单篇降级标记: {degraded: type})。"""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,6 +53,7 @@ class BriefItemRead(BaseModel):
     category: Optional[ArticleCategory] = None
     source_name: Optional[str] = None
     url: str
+    meta: Optional[dict] = None
 
 
 class BriefRead(BaseModel):

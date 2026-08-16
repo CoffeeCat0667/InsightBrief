@@ -96,6 +96,9 @@ class OperatorContext:
         cancel_check: Callable[[], bool],
         stats: Dict[str, Any],
         temperature: float = 0.3,
+        summarize_max_tokens: Optional[int] = None,
+        translate_title_max_tokens: Optional[int] = None,
+        overview_max_tokens: Optional[int] = None,
     ) -> None:
         self.provider = provider
         self.categories = categories or CATEGORIES_DEFAULT
@@ -103,6 +106,9 @@ class OperatorContext:
         self.cancel_check = cancel_check
         self.stats = stats
         self.temperature = temperature
+        self.summarize_max_tokens = summarize_max_tokens
+        self.translate_title_max_tokens = translate_title_max_tokens
+        self.overview_max_tokens = overview_max_tokens
 
     def check_cancel(self) -> None:
         """阶段间取消检查 — 批前调用; 取消抛 CancelledError 终止算子链。"""
@@ -204,6 +210,7 @@ class SummarizeOperator:
             raw = ctx.provider.chat(
                 summarize_messages(item["title"], item.get("text") or ""),
                 temperature=ctx.temperature,
+                max_tokens=ctx.summarize_max_tokens,
             )
             return parse_summary(raw)
         except ArticleContentError as exc:
@@ -217,7 +224,8 @@ class TranslateTitleOperator:
         ctx.check_cancel()
         try:
             raw = ctx.provider.chat(
-                translate_title_messages(title), temperature=ctx.temperature
+                translate_title_messages(title), temperature=ctx.temperature,
+                max_tokens=ctx.translate_title_max_tokens,
             )
             return parse_title_cn(raw)
         except ArticleContentError as exc:
@@ -235,7 +243,8 @@ class ComposeOverviewOperator:
         ctx.check_cancel()
         try:
             raw = ctx.provider.chat(
-                overview_messages(category, items), temperature=ctx.temperature
+                overview_messages(category, items), temperature=ctx.temperature,
+                max_tokens=ctx.overview_max_tokens,
             )
             return parse_overview(raw)
         except ArticleContentError as exc:

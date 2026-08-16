@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import List
 
@@ -135,9 +136,13 @@ def sync_llm_config(session: Session) -> bool:
     """LLM.json -> system_settings (key="llm"), 幂等 upsert。
 
     应用实现只读 PG; 本函数是 LLM 配置进入 DB 的唯一入口 (由启动引导调用)。
+    API key 支持 LLM_API_KEY 环境变量覆盖 (密钥不入库明文场景)。
     返回 True 表示发生写入/更新。
     """
-    cfg = llm_config()
+    cfg = dict(llm_config())
+    api_key_env = os.environ.get("LLM_API_KEY")
+    if api_key_env:
+        cfg["api_key"] = api_key_env
     setting = session.get(SystemSetting, _LLM_SETTING_KEY)
     if setting is not None and setting.value == cfg:
         return False
