@@ -18,6 +18,21 @@
   - 综述提示词中文化("其他" 不再传英文 other); source_ids 空字符串 422 validation_error(crawl+brief)
   - `sync_llm_config` 支持 `LLM_API_KEY` 环境变量覆盖 api_key, `.env.example` 补文档
 
+### 变更
+
+- `84cc01e` + `e23577b` **timeout 唯一来源 = 平台级 `fetch_timeout`**:
+  - 删除 `Config/Core.json` 全部全局 timeout(`timeout` / `generic_timeout` / `request_timeout`), 只留 attempts/wait_seconds/generic_impersonate
+  - 25 平台条目全配 `fetch_timeout`, `Tools/measure_fetch_timeout.py` 全量实测写回(本机值: 慢平台 bbc/guardian/nytimes/aljazeera/dw/forbes 35 / businessinsider 40 / 其余 20); `Core/base.py` 常量 30 仅兜底 CLI 直接实例化/未知平台路径
+  - `Core/base.py`: 爬虫 `__init__` 增加 `platform_id` 参数, `build_fetch_request` 以平台级值为唯一超时; netease/sohu/bbc/cnn 4 个自写 `__init__` 平台同步转发(防 TypeError); `Core/fetchers.py` `FetchRequest.timeout` 默认改常量 30(仅非爬虫直连路径); `Core/generic.py` 删除 generic_timeout 硬覆盖逻辑
+
+### 工具
+
+- `Tools/measure_fetch_timeout.py`(e23577b): 自动化测速写回工具 — 逐平台真实抓取计时, 建议值 `max(20, ceil(t*1.5/5)*5)` 自动写回 Clawer.json; TTY 下进度动画(序号/抓取中已用时/即时结果行), 非 TTY 自动干净输出; 支持 `--dry-run` 预览与 `--platform` 单/多平台筛选
+
+### 其他
+
+- `6e172cf` **CLI 主程序入口迁移**: `main.py` git mv 至 `Services/CLI/main.py`(自插根路径, 支持 `python -m Services.CLI.main` 与 `python Services/CLI/main.py` 双调用); **CLI 定位仅测试使用, 不再维护新功能**
+
 ## [Ver0.1.5] - 2026-08-16
 
 **简报生成系统**(commit 6bacfb4): LLM 配置落库 + 算子编排 + 端点/迁移 + kind 命名空间。

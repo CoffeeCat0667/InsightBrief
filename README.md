@@ -46,6 +46,8 @@ InsightBrief/
 │   └── processor.py            # BriefProcessor 编排
 ├── Config/                     # 唯一配置来源 (JSON 数据 + config.py 加载器)
 │   ├── Core.json / Clawer.json / Services.json / LLM.json / db.json
+├── Tools/                       # 运维工具
+│   └── measure_fetch_timeout.py # 平台超时实测写回 (换环境重调优)
 ├── alembic/                    # 迁移 (0001 13表 / 0002 max_items / 0003 brief meta/stats)
 ├── data/                       # 只读历史 JSON 档案 (不再写入)
 ├── requirements.txt
@@ -93,13 +95,25 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 
 所有配置只从 `Config/config.py` 加载(`Config/*.json` + lru_cache + 必填校验):
 
-- `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、超时/重试、playwright、阈值
-- `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy
+- `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、重试参数(attempts/wait_seconds)、playwright、generic 阈值 — **不含任何 timeout(超时已平台化)**
+- `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)**
 - `Config/Services.json`:27 源注册表 + platform/link 正则 + translator + domestic_source_ids
 - `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数;`LLM_API_KEY` 环境变量可覆盖 api_key(启动同步生效)
 - `Config/db.json`:PG/Redis DSN(`DB_DSN`/`REDIS_*` 覆盖);`.env.example` 为覆盖模板
 
 > 配置在进程启动时定型(lru_cache);启动时 Config 会同步覆盖 DB(sources 与 system_settings),运行中改 DB 无效。
+
+### 超时调优
+
+超时**唯一来源** = 各平台 `Config/Clawer.json` 条目 `fetch_timeout`(无全局 timeout;`Core/base.py` 常量 30 仅兜底 CLI/未知平台)。换服务器或网络环境变化后重调优:
+
+```bash
+python Tools/measure_fetch_timeout.py             # 全量实测并自动写回 Clawer.json
+python Tools/measure_fetch_timeout.py --dry-run   # 只预览建议值, 不写文件
+python Tools/measure_fetch_timeout.py --platform zdnet --platform dw   # 只测指定平台
+```
+
+建议值规则:实测 t 秒 → `max(20, 向上取整到 5 的 t*1.5)`。修改后**重启服务**生效。
 
 ## 新增媒体源
 
