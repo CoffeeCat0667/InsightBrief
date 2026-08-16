@@ -256,6 +256,15 @@ class GenericArticleCrawler(BaseNewsCrawler):
                 title = _TITLE_SUFFIX.sub("", title)
         title = " ".join(str(title).split()).strip()
         if not title:
+            # SPA 空壳检测: dw.com 等 React 站点 curl 仅拿到 <div id="root"> + noscript 提示,
+            # 无 title/og/meta — 需 playwright 渲染或直接抓 SSR 详情页链接
+            body_text = " ".join(sel.xpath("//body//text()").getall())
+            body_text = " ".join(body_text.split())
+            if "enable JavaScript" in body_text or len(body_text) < 20:
+                raise RuntimeError(
+                    f"SPA 空壳页(需真浏览器渲染), 请抓取文章详情页链接, 而非站点首页: "
+                    f"{self.new_url}"
+                )
             raise ValueError(f"Failed to get title: {self.new_url}")
 
         meta_info = self.parse_html_to_news_meta(html)
