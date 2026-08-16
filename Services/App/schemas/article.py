@@ -49,6 +49,8 @@ class ArticleListParams(BaseModel):
 class ArticleContenItem(BaseModel):
     """正文片段 (原文与译文并存说明: 原文在 content, 译文在翻译步骤填)。"""
 
+    model_config = ConfigDict(from_attributes=True)
+
     seq: int
     type: str = "text"
     content: str

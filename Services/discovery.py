@@ -8,13 +8,17 @@
 - RSS/Atom/RDF 源解析 (_extract_rss)
 - 源注册表 (SOURCES / DOMESTIC_SOURCE_IDS)
 
-注册表数据 (platform_patterns / link_patterns / sources) 统一存放在
-Config/Services.json, 经 Config.config 加载; 个别自定义发现逻辑 (如 CNN
-首页内嵌 JSON 提取) 保留在代码中。
+数据来源 (用户拍板, Ver0.1.2 起):
+- **源注册表真相 = DB sources 表**: 仅 enabled=True 的行参与构建;
+  每次启动由 Services/App/sync.py 以 Config/Services.json 校验同步到 DB,
+  本模块只从 DB 读, 不碰配置文件。
+- platform_patterns / link_patterns 正则与 discovery HTTP 参数仍留
+  Config/Services.json (平台识别基础设施, 非源业务数据)。
 
 依赖:
 - requests (_http_get_text 请求)
 - Config.config (代理/超时/UA, 直连失败经 CRAWL_PROXY 代理重试一次)
+- Services.App.db (构建源注册表时按需连接)
 
 用法:
     from Services.discovery import SOURCES  # 或
@@ -230,8 +234,18 @@ _CUSTOM_DISCOVERERS: Dict[str, Callable[[], List[ArticleLink]]] = {
 
 
 # ================================================================
-# 源注册表 (数据来自 Config/Services.json)
+# 源注册表 (真相源 = DB sources 表, 懒加载构建)
 # ================================================================
+def _row_to_spec(row) -> dict:
+    """DB 源行 -> discovery 工厂所需 spec 字典 (config 列展开 + 元信息)。"""
+    spec = dict(row.config or {})
+    spec["id"] = row.id
+    spec["name"] = row.name
+    spec["kind"] = row.kind
+    spec["platform_ids"] = list(row.platform_ids or [])
+    return spec
+
+
 def _make_rss_discover(spec: dict) -> Callable[[], List[ArticleLink]]:
     """RSS 类源 discover 工厂: 按配置的 feeds / url_replace / skip_substrings 构建。"""
     feeds = spec["feeds"]
@@ -263,12 +277,13 @@ def _make_column_discover(spec: dict) -> Callable[[], List[ArticleLink]]:
     return discover
 
 
-def _build_sources() -> Dict[str, NewsSource]:
-    """按 Config/Services.json 的 sources 表构建源注册表。"""
+def _build_sources_from_rows(rows) -> Dict[str, NewsSource]:
+    """按 DB 源行构建注册表 (仅调用方传入的行参与, 通常为 enabled=True)。"""
     sources: Dict[str, NewsSource] = {}
-    for spec in _CFG["sources"]:
-        source_id = spec["id"]
+    for row in rows:
+        source_id = row.id
         custom = _CUSTOM_DISCOVERERS.get(source_id)
+        spec = _row_to_spec(row)
         if custom is not None:
             discover = custom
         elif spec["kind"] == "rss":
@@ -289,19 +304,41 @@ def _build_sources() -> Dict[str, NewsSource]:
     return sources
 
 
-SOURCES = _build_sources()
+def _load_sources_from_db() -> None:
+    """首次调用时从 DB sources 表构建注册表 (仅启用源)。"""
+    global SOURCES, DOMESTIC_SOURCE_IDS
+    from Services.App.db import SessionLocal
+    from Services.App.models import Source
+    from sqlalchemy import select
 
-# 国内媒体源 id 集合 (pipeline 用来做国内占比权重分配)
-DOMESTIC_SOURCE_IDS = set(_CFG["domestic_source_ids"])
+    with SessionLocal() as session:
+        rows = list(session.scalars(select(Source).where(Source.enabled.is_(True))).all())
+        SOURCES = _build_sources_from_rows(rows)
+        DOMESTIC_SOURCE_IDS = {row.id for row in rows if row.is_domestic}
+
+
+SOURCES: Dict[str, NewsSource] = {}
+DOMESTIC_SOURCE_IDS: set = set()
+_sources_loaded = False
+
+
+def _ensure_sources_loaded() -> None:
+    """懒加载入口: import 时不连库, 首次读源才构建。"""
+    global _sources_loaded
+    if not _sources_loaded:
+        _load_sources_from_db()
+        _sources_loaded = True
 
 
 def is_domestic(source_id: str) -> bool:
     """是否为国内媒体源。"""
+    _ensure_sources_loaded()
     return source_id in DOMESTIC_SOURCE_IDS
 
 
 def get_source(source_id: str) -> NewsSource:
     """按 id 获取源, 未知 id 抛 ValueError。"""
+    _ensure_sources_loaded()
     source = SOURCES.get(source_id)
     if source is None:
         raise ValueError(f"未知新闻源: {source_id}, 可选: {', '.join(SOURCES)}")

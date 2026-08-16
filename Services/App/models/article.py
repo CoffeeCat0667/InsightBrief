@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
 
@@ -43,6 +43,12 @@ class Article(TimestampMixin, Base):
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
     crawled_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    contents: Mapped[list["ArticleContent"]] = relationship(
+        cascade="all, delete-orphan", order_by="ArticleContent.seq"
+    )
+    media: Mapped[list["ArticleMedia"]] = relationship(
+        cascade="all, delete-orphan"
+    )
 
 
 class ArticleContent(Base):
