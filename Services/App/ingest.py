@@ -141,7 +141,7 @@ def _crawler_for_link(link, platform_ids: List[str]):
     cls = find_crawler_class(platform)
     if cls is None:
         return None
-    return cls(link.url)
+    return cls(link.url, platform_id=platform)
 
 
 def _summary_item_from_link(link) -> NewsItem:

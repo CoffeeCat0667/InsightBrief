@@ -34,20 +34,24 @@
     },
     "guardian": {
       "base_url": "https://www.theguardian.com",
-      "content_xpath": "//div[@data-gu-name=\"body\"]"
+      "content_xpath": "//div[@data-gu-name=\"body\"]",
+      "fetch_timeout": 30.0
     },
     "nytimes": {
       "base_url": "https://cn.nytimes.com",
       "content_xpath": "//section[contains(@class, \"article-body\")]",
-      "block_xpath": ".//div[contains(@class, 'article-paragraph')]"
+      "block_xpath": ".//div[contains(@class, 'article-paragraph')]",
+      "fetch_timeout": 30.0
     },
     "aljazeera": {
       "base_url": "https://www.aljazeera.com",
-      "content_xpath": ""
+      "content_xpath": "",
+      "fetch_timeout": 30.0
     },
     "dw": {
       "base_url": "https://www.dw.com",
-      "content_xpath": ""
+      "content_xpath": "",
+      "fetch_timeout": 30.0
     },
     "npr": {
       "base_url": "https://www.npr.org",
@@ -59,7 +63,8 @@
     },
     "forbes": {
       "base_url": "https://www.forbes.com",
-      "content_xpath": "//div[contains(@class, \"article-body\")]"
+      "content_xpath": "//div[contains(@class, \"article-body\")]",
+      "fetch_timeout": 30.0
     },
     "fortune": {
       "base_url": "https://fortune.com",
@@ -68,7 +73,8 @@
     "businessinsider": {
       "base_url": "https://www.businessinsider.com",
       "content_xpath": "",
-      "min_content_chars": 200
+      "min_content_chars": 200,
+      "fetch_timeout": 30.0
     },
     "marketwatch": {
       "base_url": "https://www.marketwatch.com",

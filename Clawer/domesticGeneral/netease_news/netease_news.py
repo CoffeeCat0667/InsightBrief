@@ -40,6 +40,7 @@ class NeteaseNewsCrawler(BaseNewsCrawler):
         save_path: str = "data/",
         headers: Optional[RequestHeaders] = None,
         fetcher: Optional[CurlCffiFetcher] = None,
+        platform_id: Optional[str] = None,
     ):
         """初始化网易新闻详情爬虫
 
@@ -48,7 +49,7 @@ class NeteaseNewsCrawler(BaseNewsCrawler):
             save_path (str, optional): 保存路径. Defaults to "data/".
             headers (RequestHeaders, optional): 请求头. Defaults to RequestHeaders().
         """
-        super().__init__(new_url, save_path, headers=headers, fetcher=fetcher)
+        super().__init__(new_url, save_path, headers=headers, fetcher=fetcher, platform_id=platform_id)
 
     @property
     def get_base_url(self) -> str:

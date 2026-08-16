@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from parsel import Selector
 
 from .base import BaseNewsCrawler
-from Config.config import core_config
+from Config.config import core_config, platform_config
 from .fetchers import CurlCffiFetcher, FetchRequest
 from .models import ContentItem, ContentType, NewsItem, NewsMetaInfo
 
@@ -47,8 +47,8 @@ class GenericArticleCrawler(BaseNewsCrawler):
     min_paragraph_chars: int = core_config()["generic"]["min_paragraph_chars"]
     min_content_chars: int = core_config()["generic"]["min_content_chars"]
 
-    def __init__(self, new_url: str, save_path: str = _SAVE_DIR, headers=None, fetcher=None):
-        super().__init__(new_url, save_path, headers=headers, fetcher=fetcher)
+    def __init__(self, new_url: str, save_path: str = _SAVE_DIR, headers=None, fetcher=None, platform_id: Optional[str] = None):
+        super().__init__(new_url, save_path, headers=headers, fetcher=fetcher, platform_id=platform_id)
 
     # ---------------------------------------------------------------------- #
     # URL / id
@@ -68,7 +68,9 @@ class GenericArticleCrawler(BaseNewsCrawler):
     def build_fetch_request(self) -> FetchRequest:
         request = super().build_fetch_request()
         request.impersonate = core_config()["fetch"]["generic_impersonate"]
-        request.timeout = core_config()["fetch"]["generic_timeout"]
+        # 平台级 fetch_timeout 已配时保留 (base 注入), 否则回落 generic 全局值
+        if not (self.platform_id and platform_config(self.platform_id).get("fetch_timeout")):
+            request.timeout = core_config()["fetch"]["generic_timeout"]
         return request
 
     # ---------------------------------------------------------------------- #

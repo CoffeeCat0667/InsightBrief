@@ -9,7 +9,7 @@ from typing import Optional, Type
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
-from Config.config import core_config, get_proxy_config
+from Config.config import core_config, get_proxy_config, platform_config
 from .fetchers import (
     CurlCffiFetcher,
     FetchRequest,
@@ -42,10 +42,12 @@ class BaseNewsCrawler(ABC):
         save_path: str = _SAVE_DIR,
         headers: Optional[RequestHeaders] = None,
         fetcher: Optional[FetchStrategy] = None,
+        platform_id: Optional[str] = None,
     ):
         self.new_url = new_url
         self.url = new_url  # Compatibility with legacy usages
         self.save_path = Path(save_path)
+        self.platform_id = platform_id
         self.headers_model_instance = headers or self.headers_model()
         self.headers = self.headers_model_instance.to_http_headers()
         self.fetcher = fetcher or self.create_fetcher()
@@ -69,10 +71,15 @@ class BaseNewsCrawler(ABC):
 
     def build_fetch_request(self) -> FetchRequest:
         """Produce the request parameters for the fetcher."""
+        timeout = self.fetch_timeout
+        if self.platform_id:
+            timeout = (
+                platform_config(self.platform_id).get("fetch_timeout") or timeout
+            )
         return FetchRequest(
             url=self.new_url,
             headers=self.headers,
-            timeout=self.fetch_timeout,
+            timeout=timeout,
         )
 
     def fetch_content(self) -> str:
