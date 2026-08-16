@@ -26,6 +26,17 @@ class CrawlTaskCreate(BaseModel):
     """POST /api/crawl-tasks 请求体; source_ids 省略 = 全部启用源。"""
 
     source_ids: Optional[List[str]] = None
+    max_items: int = 30
+
+
+class TaskEvent(BaseModel):
+    """SSE 进度事件 (GET /api/tasks/{id}/events 推送负载)。"""
+
+    task_id: int
+    event: str
+    data: Dict[str, Any]
+    seq: int
+    ts: str
 
 
 class CrawlRunRead(BaseModel):
@@ -56,6 +67,7 @@ class CrawlTaskRead(BaseModel):
     stage: Optional[str] = None
     message: Optional[str] = None
     source_ids: Optional[List[str]] = None
+    max_items: int = 30
     error: Optional[Dict[str, Any]] = None
     stats: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None

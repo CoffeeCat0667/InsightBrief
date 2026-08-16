@@ -2,10 +2,11 @@
 """InsightBrief Web API 入口: FastAPI 实例、lifespan 引导、统一响应/错误契约。
 
 启动: uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
-lifespan: 建表兜底 + 配置->DB 源同步 + 角色/管理员种子。
+lifespan: 建表兜底 + 配置->DB 源同步 + 角色/管理员种子 + 任务运行时接线。
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -15,10 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .db import SessionLocal
-from .routers import articles, auth, sources
+from .routers import articles, auth, sources, tasks
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
 from .sync import ensure_schema, run_sources_sync
+from .task_manager import manager
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,10 @@ def _bootstrap() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _bootstrap()
+    manager.recover_stale_tasks()
+    manager.set_loop(asyncio.get_running_loop())
     yield
+    manager.shutdown()
 
 
 app = FastAPI(
@@ -110,3 +115,5 @@ app.include_router(auth.router)
 app.include_router(sources.router)
 app.include_router(articles.router)
 app.include_router(articles.platforms_router)
+app.include_router(tasks.router)
+app.include_router(tasks.events_router)

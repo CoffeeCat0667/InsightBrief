@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
 
@@ -32,10 +32,17 @@ class CrawlTask(TimestampMixin, Base):
     stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_ids: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    max_items: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    runs: Mapped[list["CrawlRun"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="CrawlRun.id",
+    )
 
 
 class CrawlRun(TimestampMixin, Base):
@@ -57,3 +64,5 @@ class CrawlRun(TimestampMixin, Base):
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    task: Mapped["CrawlTask"] = relationship(back_populates="runs")
