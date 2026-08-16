@@ -1,0 +1,28 @@
+{
+  "base_url": "https://sub.sailapi.top/v1",
+  "api_key": "sk-1b75a10330480a52c7f8bb8dbe7ead09f8c7800597cb9a6e9aa72e77b0b2610d",
+  "model_id": "gpt-5.6-terra",
+  "timeout_s": 60,
+  "batch_size": 20,
+  "concurrency": 4,
+  "quarantine_consecutive": 3,
+  "retry": {
+    "attempts": 3,
+    "backoff_s": [1, 2, 4]
+  },
+  "operators": {
+    "classify": {
+      "max_batch": 20,
+      "categories": ["政治", "经济", "文化", "科技"]
+    },
+    "summarize": {
+      "max_tokens": 300
+    },
+    "translate_title": {
+      "fallback_translator": true
+    },
+    "compose_overview": {
+      "max_tokens": 800
+    }
+  }
+}

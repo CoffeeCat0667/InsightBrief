@@ -33,6 +33,7 @@ class BriefTaskRead(BaseModel):
     message: Optional[str] = None
     params: Optional[dict] = None
     error: Optional[dict] = None
+    stats: Optional[dict] = None
     created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None

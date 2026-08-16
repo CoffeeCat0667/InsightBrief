@@ -17,10 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .db import SessionLocal
-from .routers import articles, auth, sources, tasks
+from .routers import articles, auth, briefs, sources, tasks
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
-from .sync import ensure_schema, run_sources_sync
+from .sync import ensure_schema, run_llm_sync, run_sources_sync
 from .task_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ def _bootstrap() -> None:
         return
     ensure_schema()
     run_sources_sync()
+    run_llm_sync()
     with SessionLocal() as session:
         seed_all(session)
     _lifespan_done = True
@@ -44,6 +45,7 @@ def _bootstrap() -> None:
 async def lifespan(app: FastAPI):
     _bootstrap()
     manager.recover_stale_tasks()
+    manager.recover_stale_brief_tasks()
     manager.set_loop(asyncio.get_running_loop())
     yield
     manager.shutdown()
@@ -124,3 +126,5 @@ app.include_router(articles.router)
 app.include_router(articles.platforms_router)
 app.include_router(tasks.router)
 app.include_router(tasks.events_router)
+app.include_router(briefs.router)
+app.include_router(briefs.briefs_router)

@@ -119,3 +119,23 @@ def db_config() -> Dict[str, Any]:
     _require(data, "postgres.max_overflow", "db.json")
     _require(data, "redis.host", "db.json")
     return data
+
+
+@lru_cache(maxsize=None)
+def llm_config() -> Dict[str, Any]:
+    """LLM.json: 简报系统 LLM 配置 (统一 OpenAI V1 接口, 不区分提供商)。
+
+    仅由 sync.py 读取注入 PG (system_settings key="llm"); 应用实现一律
+    只读 PG, 不直接读此文件。
+    """
+    data = _load("LLM")
+    for key in (
+        "base_url",
+        "api_key",
+        "model_id",
+        "timeout_s",
+        "retry.attempts",
+        "operators.classify.categories",
+    ):
+        _require(data, key, "LLM.json")
+    return data

@@ -27,6 +27,7 @@ class BriefTask(TimestampMixin, Base):
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     params: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
@@ -65,3 +66,4 @@ class BriefItem(Base):
     category: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     source_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

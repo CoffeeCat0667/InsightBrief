@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
-from ..models import CrawlTask, User
+from ..models import BriefTask, CrawlTask, User
 from ..schemas import CrawlTaskCreate, CrawlTaskRead, Page, PageParams, TaskCancelRead, TaskCancelRequest, ok
 from ..schemas.task import TaskStatus
 from ..security import get_current_user, require_admin
@@ -68,7 +68,7 @@ def create_crawl_task(
     session.flush()
     session.commit()
     task = session.get(CrawlTask, task.id)
-    manager.dispatch(task.id)
+    manager.dispatch(task.id, kind="crawl")
     return ok(CrawlTaskRead.model_validate(task))
 
 
@@ -130,7 +130,7 @@ def cancel_crawl_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": f"任务 {task_id} 不存在"},
         )
-    if task.status not in _TERMINAL and manager.request_cancel(task_id):
+    if task.status not in _TERMINAL and manager.request_cancel(task_id, kind="crawl"):
         session.refresh(task)
         return ok(
             TaskCancelRead(task_id=task_id, task_status=task.status, requested=True)
@@ -151,15 +151,23 @@ async def task_event_stream(
     窗口 — 重放循环的 await 让出事件循环时 publish 的事件, 既不在
     重放列表、也未入订阅队列而永久丢失); seq <= last_seq 去重兜底。
     """
-    task = session.get(CrawlTask, task_id)
+    task = session.get(CrawlTask, task_id) or session.get(BriefTask, task_id)
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": f"任务 {task_id} 不存在"},
         )
-    active = task.status not in _TERMINAL or manager.is_active(task_id)
+    kind = "brief" if isinstance(task, BriefTask) else "crawl"
+    active = task.status not in _TERMINAL or manager.is_active(task_id, kind=kind)
 
-    TERMINAL_EVENTS = {"task_completed", "task_failed", "task_cancelled"}
+    TERMINAL_EVENTS = {
+        "task_completed",
+        "task_failed",
+        "task_cancelled",
+        "brief_completed",
+        "brief_failed",
+        "brief_cancelled",
+    }
 
     def fmt(ev: dict) -> str:
         return (
@@ -171,10 +179,10 @@ async def task_event_stream(
         try:
             yield ": connected\n\n"
             # 先订阅: 重放期间的实时事件进入订阅队列, 由 seq 去重兜住
-            queue = manager.subscribe(task_id)
+            queue = manager.subscribe(task_id, kind=kind)
             try:
                 last_seq = 0
-                for ev in manager.replay_events(task_id):
+                for ev in manager.replay_events(task_id, kind=kind):
                     last_seq = max(last_seq, ev.get("seq") or 0)
                     if await request.is_disconnected():
                         return
@@ -200,7 +208,7 @@ async def task_event_stream(
                         return
                     last_seq = ev.get("seq") or 0
             finally:
-                manager.unsubscribe(task_id, queue)
+                manager.unsubscribe(task_id, queue, kind=kind)
         except asyncio.CancelledError:
             pass
 
