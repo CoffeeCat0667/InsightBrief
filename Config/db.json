@@ -1,0 +1,14 @@
+{
+  "postgres": {
+    "dsn": "postgresql+psycopg://postgres:%40Lxd20061107@127.0.0.1:5432/insightbrief",
+    "pool_size": 5,
+    "max_overflow": 10,
+    "echo": false
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 0,
+    "password": null
+  }
+}

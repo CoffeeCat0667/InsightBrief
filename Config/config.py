@@ -18,6 +18,14 @@ _CORE_ENV_PATHS = {
     ("proxy", "default"): "CRAWL_PROXY",
 }
 
+_DB_ENV_PATHS = {
+    ("postgres", "dsn"): "DB_DSN",
+    ("redis", "host"): "REDIS_HOST",
+    ("redis", "port"): "REDIS_PORT",
+    ("redis", "db"): "REDIS_DB",
+    ("redis", "password"): "REDIS_PASSWORD",
+}
+
 
 class ConfigError(ValueError):
     """配置文件缺失/非法/缺必填键时抛出。"""
@@ -100,3 +108,14 @@ def get_proxy_config() -> Optional[Mapping[str, str]]:
     if not proxy:
         return None
     return {"http": proxy, "https": proxy}
+
+
+@lru_cache(maxsize=None)
+def db_config() -> Dict[str, Any]:
+    """db.json: PostgreSQL / Redis 连接配置, 支持 DB_DSN/REDIS_* 环境变量覆盖。"""
+    data = _apply_env(_load("db"), _DB_ENV_PATHS)
+    _require(data, "postgres.dsn", "db.json")
+    _require(data, "postgres.pool_size", "db.json")
+    _require(data, "postgres.max_overflow", "db.json")
+    _require(data, "redis.host", "db.json")
+    return data
