@@ -20,6 +20,10 @@ from .models import ContentItem, NewsItem, NewsMetaInfo, RequestHeaders
 _FETCH = core_config()["fetch"]
 _SAVE_DIR = core_config()["paths"]["save_dir"]
 
+# 超时唯一来源 = 各平台 Clawer.json 条目 fetch_timeout (platform_id 注入);
+# 此常量仅兜底 CLI 直接实例化/未知平台路径, 不参与任何配置驱动取值。
+_FALLBACK_TIMEOUT = 30.0
+
 
 class BaseNewsCrawler(ABC):
     """
@@ -33,7 +37,7 @@ class BaseNewsCrawler(ABC):
     fetch_strategy: Type[FetchStrategy] = CurlCffiFetcher
     fetch_attempts: int = _FETCH["attempts"]
     fetch_wait_seconds: float = _FETCH["wait_seconds"]
-    fetch_timeout: float = _FETCH["timeout"]
+    fetch_timeout: float = _FALLBACK_TIMEOUT
     persist_by_default: bool = True
 
     def __init__(

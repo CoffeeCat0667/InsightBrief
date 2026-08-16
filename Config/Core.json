@@ -7,9 +7,6 @@
   "fetch": {
     "attempts": 3,
     "wait_seconds": 1.0,
-    "timeout": 15.0,
-    "request_timeout": 10.0,
-    "generic_timeout": 20.0,
     "generic_impersonate": "chrome"
   },
   "playwright": {

@@ -19,9 +19,9 @@ class FetchRequest:
     url: str
     method: str = "GET"
     headers: Mapping[str, str] | None = None
-    timeout: float = field(
-        default_factory=lambda: core_config()["fetch"]["request_timeout"]
-    )
+    # 超时唯一来源为平台级 fetch_timeout (base 显式传入); 此兜底仅覆盖
+    # 绕过爬虫直接构造 FetchRequest 的调用路径。
+    timeout: float = 30.0
     allow_redirects: bool = True
     impersonate: Optional[str] = None
     params: Mapping[str, str] | None = None
