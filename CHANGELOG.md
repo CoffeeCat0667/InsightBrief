@@ -2,6 +2,101 @@
 
 本仓库所有值得记录的变更均按时间倒序记录于此。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 回滚
+
+- **前端已回滚** (revert eec51a9, 撤销 eec5241): 单页前端(登录/文章浏览/抓取触发+SSE/简报面板)整块撤销 — **用户拍板不做前端**;Web 后端功能继续经 REST API + `/docs` 使用。`Services/App/static/` 已删除, 版本字段回到 0.1.2。
+
+### 修复
+
+- `bfb01c5` **code review 修复批次**:
+  - SSE 按任务类型拆独立端点: `/api/brief-tasks/{id}/events` 专属 brief, `/api/tasks/{id}/events` 恢复仅 crawl, 消除两表 id 各自自增的歧义(错表互查 404)
+  - `parse_classify` 对 malformed idx(如 `"0.0"`)容错跳过, 缺项判定走二分拆批/单篇降级, 不再 internal_error
+  - LLM 配置接线: 删除 LLM.json 顶层冗余 `batch_size`; `operators.classify.max_batch` 生效; summarize/translate_title/compose_overview 三个 `max_tokens` 透传生效; `BriefTaskCreate.max_items`(1-500)可用
+  - `brief_items.source_name` 写真名(Source id→name 映射); `BriefItemRead.meta` 暴露单篇降级标记
+  - 综述提示词中文化("其他" 不再传英文 other); source_ids 空字符串 422 validation_error(crawl+brief)
+  - `sync_llm_config` 支持 `LLM_API_KEY` 环境变量覆盖 api_key, `.env.example` 补文档
+
+## [Ver0.1.5] - 2026-08-16
+
+**简报生成系统**(commit 6bacfb4): LLM 配置落库 + 算子编排 + 端点/迁移 + kind 命名空间。
+
+### 新增
+
+- `Config/LLM.json` + `llm_config()`: LLM 唯一真相源(base_url/api_key/model_id, 换厂商只改 json; timeout/retry/quarantine_consecutive/concurrency); `sync_llm_config` 幂等 upsert `system_settings` key="llm"
+- `Report/` 包: `llm/`(Provider ABC + ChatMessage + 错误两分 `LLMServiceError`/`ArticleContentError` + OpenAI V1 统一客户端: requests + 指数退避, 403 风控不重试)、`prompts.py`(分类/摘要/标题/综述 4 组 prompt + extract_json)、`operators.py`(4 算子; 分类二分拆批递归; ArticleDegraded/OverviewDegraded 信号)、`processor.py`(BriefProcessor 编排: 分类→摘要/标题并发→综述→落库+文章回写)
+- 端点: `POST/GET /api/brief-tasks` + `/{id}` + `/{id}/cancel` + `GET /api/briefs(/{id})`; 事件走 kind 命名空间隔离的 SSE
+- `alembic` 0003: `brief_items.meta` + `brief_tasks.stats` JSONB(已执行)
+
+### 语义(用户拍板)
+
+- 错误两分: 403 内容风控 = 单篇降级不计全挂; LLMServiceError(超时/连接/5xx/429) = 计入
+- 连续失败 ≥ quarantine_consecutive(3) → 立即 failed + upstream_error; 收尾全服务级降级(success=0 且全部 service 类) → failed 兜底
+- 降级路径: title_cn=普通翻译 + 非中文全文翻译写 articles.translated_content + summary=None + meta={degraded: type}
+- 取消 = 阶段间生效, 半成品不落库(原子); 全挂 failed = 残料保留(与取消区分)
+- 分类输出中文 → CATEGORY_CN_EN 归一英文枚举(politics/economy/culture/technology/other)
+
+### 验证
+
+- 真实 key 端到端 10 篇(中英源混合): completed, 4 份 brief 综述质量合格, 文章回写全绿
+- SSE 实时 + 终态重放 6 事件纯 brief 序列, crawl/brief 不串流
+- 降级实测(不可达 base_url): 分类降级继续 → 摘要连续 3 次失败 → **failed upstream_error**
+- 取消实测: running 中 cancel → brief_cancelled, briefs 0 份
+
+## [Ver0.1.4] - 2026-08-16
+
+**抓取任务运行时 + SSE 进度通道**(commit 3de86c4 + c994eba + a26cd6c)。
+
+### 新增
+
+- `task_manager.py`: ThreadPoolExecutor(4) 并发执行; 事件总线(内存尾缓冲 + Redis 链/快照 + asyncio 订阅队列); `recover_stale_tasks` 启动恢复孤儿任务; `request_cancel`(源间生效)
+- 端点: `POST /api/crawl-tasks`(409 幂等, 源集合重叠即拒; source_ids 省略 = 全部启用源)、列表/详情(含 runs)、`.../{id}/cancel`、`GET /api/tasks/{id}/events`(SSE)
+- `alembic` 0002: `crawl_tasks.max_items`(server_default 30, 已执行)
+- 修复: CLI 菜单空回归(懒加载原地更新 + ensure_sources_loaded); 并发 P1-P4(重复入库/任务状态/清理)修复
+
+### 关键设计
+
+- SSE 唯一进度通道: 先重放 Redis 历史事件再订阅实时; 15s 心跳 `: ping`; 终态事件发出即关流
+- 事件序列: `task_update → run_started → run_finished → task_update(每源) → task_completed/failed/cancelled`
+- cancel 语义: 已在跑的源跑完即停, 未开始的源跳过, 最终 cancelled
+- 注意: 源级抓取可能很慢(bbc 2 篇 ~90s), SSE 客户端超时须 > 单源最坏耗时
+
+### 验证
+
+- 实时 SSE 与终态重放事件齐全; 同源重复创建 409; cancel → cancelled; 列表 status 过滤/404/401 全绿
+- 孤儿任务恢复: 杀进程重启后滞留 running 任务被标记 failed
+- 全仓 import 冒烟 0 失败
+
+## [Ver0.1.3] - 2026-08-16
+
+**Web 后端化: FastAPI 骨架 + 登录鉴权 + SQLAlchemy 接线**(commit 0e17129)。
+
+### 新增
+
+- `Services/discovery.py` 源注册表改 DB 懒加载(只取 enabled=True, 工厂逻辑保留); import 不连库
+- `Services/App/ingest.py`: make_external_id(SHA256(url[:512])[:16])、upsert_article(按 source+external 幂等)、crawl_and_ingest
+- `Services/App/security.py`: bcrypt + PyJWT(HS256, 24h) + get_current_user + require_admin + seed_all(幂等角色/初始 admin)
+- 路由: auth(register/login/me)、sources(CRUD, admin 写)、articles(列表/搜索/详情 joinedload)、platforms(聚合 Clawer 目录 26 平台)
+- `main.py`: FastAPI 入口 + lifespan 引导(建表/源同步/种子) + CORS + 统一错误包装; requirements 增补 fastapi/uvicorn/sqlalchemy/alembic/psycopg/redis/bcrypt/PyJWT
+
+### 验证
+
+- HTTP 全链路 15 项全绿(health/401/403/409/404/422/搜索/删除等)
+- 真实抓取落库: bbc_rss 2 篇(42 片段+2 媒体)、washingtonpost 摘要型 2 篇、二跑幂等 existed=2
+- 全仓 import 冒烟 0 失败
+
+## [Ver0.1.2] - 2026-08-16
+
+**Web 后端化: 数据模型 + API 契约**(commit 5c0b114)。
+
+### 新增
+
+- `Services/App/models/`: 13 张表 SQLAlchemy 2.0 ORM(sources/crawl_tasks/crawl_runs/articles/article_contents/article_media/brief_tasks/briefs/brief_items/users/roles/system_settings/audit_logs), `UNIQUE(source_id, external_id)` + url 唯一, JSONB 配置列
+- `Services/App/schemas/`: 11 端点 API 契约(统一 `ApiResponse{success,data,error}` + ErrorCode 9 枚举 + `Page[T]` 分页)
+- `Services/App/sync.py`: 配置→DB 同步(插/改/软禁用三分支, 幂等); `Config/db.json` + `db_config()`(PG/Redis DSN, env 覆盖)
+- `alembic` 0001: 13 表全量迁移, 已在真实 PG 执行成功
+
 ## [Ver0.1.1] - 2026-08-15
 
 配置抽取重构:硬编码配置收归 `Config/` 目录,全平台全源改由唯一加载器供给。
