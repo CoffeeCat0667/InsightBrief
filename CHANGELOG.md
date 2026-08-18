@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **栏目页发现误提取推广横幅**(81.cn 中国军网): `discovery._extract_column` 由整 HTML 裸正则改为 **DOM 解析 (parsel)** — 只取 `<a href>` 精确链接,跳过广告/推广容器(`banner`/`ad`/`ads`/`advert`/`adbox`/`promo`/`tui`/`gg` 类名),且广告容器内出现过的 URL 记入全局跳过集合(同横幅多处引用一并排除);`//` 前缀补 `https:`,相对路径经 `urljoin` 兼容,保留 link_pattern `?`/`#` 截断语义。回归:6 个 column 源实测全绿, jfjb 首条由横幅变真实新闻
+
 ### 新增
 
 - **audit_logs 写入落地**(关键操作留痕):

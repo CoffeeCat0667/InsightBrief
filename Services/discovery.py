@@ -33,9 +33,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
+from urllib.parse import urljoin
 from xml.etree import ElementTree
 
 import requests
+from parsel import Selector
 
 from Config.config import core_config, services_config
 
@@ -189,22 +191,61 @@ def _find_content(node: ElementTree.Element) -> str:
 # ================================================================
 # 栏目页发现 (首页 HTML + 详情链接形态正则)
 # ================================================================
+# 广告/推广容器类名特征 (小写子串; 81.cn banner 轮播等横幅均落此排除)
+_AD_HINT_CLASSES = (
+    " banner", " ad", " ads", " adver", " adbox", " promo", " tui", " gg",
+)
+
+
+def _in_ad_container(a) -> bool:
+    """链接所在祖先元素带广告/推广类名则跳过 (横幅/推广位误提取根因修复)。"""
+    for ancestor in a.xpath("ancestor::*[@class]"):
+        cls = " " + (ancestor.xpath("@class").get() or "").lower() + " "
+        if any(hint in cls for hint in _AD_HINT_CLASSES):
+            return True
+    return False
+
+
+def _normalize_href(href: str, page_url: str, pattern: re.Pattern) -> Optional[str]:
+    """补齐协议/相对路径 (// 前缀 -> https:; 无协议相对 -> urljoin), 返回匹配
+    link_pattern 的绝对 URL (取正则匹配部分, 保留 ?/# 截断语义); 不匹配返回 None。"""
+    if href.startswith("//"):
+        href = "https:" + href
+    elif not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:", href):
+        href = urljoin(page_url, href)
+    match = pattern.match(href)
+    return match.group(0) if match else None
+
+
 def _extract_column(url: str, source_id: str, pattern: re.Pattern) -> List[ArticleLink]:
-    """抓取栏目页 HTML, 提取匹配详情页形态的链接并保序去重。"""
+    """抓取栏目页 HTML, 提取匹配详情页形态的链接并保序去重。
+
+    DOM 化 (parsel): 只取 <a href> 且跳过广告/推广容器 (banner/ad/gg 等类名),
+    广告容器内出现的 URL 记入全局跳过集合 — 同一条横幅被页面多位置
+    引用时任何位置都不再提取 (81.cn banner 轮播曾命中 link_pattern)。
+    """
     try:
         html = _http_get_text(url)
     except requests.RequestException as exc:
         logging.warning("[%s] 栏目页获取失败, 跳过: %s", source_id, exc)
         return []
     seen = set()
+    ad_urls = set()
     links = []
-    for match in pattern.finditer(html):
-        link = match.group(0)
-        if link.startswith("//"):
-            link = "https:" + link
-        if link not in seen:
-            seen.add(link)
-            links.append(ArticleLink(url=link, title="", publish_time="", source=source_id))
+    for a in Selector(text=html).xpath("//a[@href]"):
+        href = (a.xpath("@href").get() or "").strip()
+        if not href:
+            continue
+        href = _normalize_href(href, url, pattern)
+        if href is None or href in seen:
+            continue
+        if _in_ad_container(a):
+            ad_urls.add(href)
+            continue
+        if href in ad_urls:
+            continue
+        seen.add(href)
+        links.append(ArticleLink(url=href, title="", publish_time="", source=source_id))
     return links
 
 
