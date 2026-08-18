@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 T = TypeVar("T")
 
@@ -72,6 +72,7 @@ class Page(BaseModel, Generic[T]):
     page: int
     page_size: int
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def pages(self) -> int:
         if self.total == 0:
