@@ -20,6 +20,7 @@
 - **前端登录 422 "请求参数校验失败"**: 登录/注册两 tab 同名 `username`/`password` 控件使 `form.username` 返回 RadioNodeList(无 `.value`)→ 请求体字段为空; auth.js 改按 tab 选择器取值, sources.js 同步规避 `form.name` 固有属性陷阱, api.js 过滤 undefined/null 表单值
 - **前端 SSE 字段错读**: crawl.js `run_finished` 原读不存在的 `stats.ok`, 改读 `stats.inserted/existed/failed`; crawl/brief 两视图终态事件后自动刷新历史/存档列表
 - **分页计数 "第 1 / NaN 页"**: `Page.pages` 原为普通 `@property`, Pydantic v2 序列化默认不含 → 响应缺 `pages` 字段; 改 `@computed_field`(schemas/common.py), 全部分页端点一次性修复, 前端 `第 ${page} / ${pages} 页 · 共 ${total} 条` 恢复正确
+- **抓取页实时面板改进**: run 徽章链改本地状态驱动(run_started 立即显示"xx 抓取中", run_finished 即更新计数, 不再等 task_update); 历史行 source_ids 为空(全源任务)显示"全部源"而非"源 0 个"; task_update 的 stage 输出到事件日志 — 全量 27 源任务首源完成前不再"看起来卡死"(首源耗时可达 10 分钟+)
 
 ### 其他
 
