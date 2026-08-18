@@ -65,6 +65,13 @@ export async function crawlView(root) {
 
   // ---- SSE 实时进度 ----
   let ac = null;
+  let runs = [];
+  const upsertRun = (sid, patch) => {
+    const i = runs.findIndex((r) => r.source_id === sid);
+    if (i >= 0) runs[i] = { ...runs[i], ...patch };
+    else runs.push({ source_id: sid, ...patch });
+    renderRuns();
+  };
   async function startCrawl() {
     const body = { max_items: Number(root.querySelector("#max-items").value) || 30 };
     if (selected.size) body.source_ids = [...selected];
@@ -110,10 +117,10 @@ export async function crawlView(root) {
       log.appendChild(el);
       log.scrollTop = log.scrollHeight;
     };
-    const renderRuns = (runs = []) => {
-      strip.innerHTML = runs.map((r) => {
+    const renderRuns = (list = runs) => {
+      strip.innerHTML = list.map((r) => {
         const cls = r.status === "completed" ? "ok" : r.status === "failed" ? "err" : r.status === "running" ? "running" : "";
-        return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${r.success_count}/${(r.success_count || 0) + (r.failed_count || 0)}</span>`;
+        return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${r.success_count || 0}/${(r.success_count || 0) + (r.failed_count || 0)}</span>`;
       }).join("") || `<span class="empty-hint" style="padding:8px 0">等待源任务开始...</span>`;
     };
 
@@ -121,6 +128,7 @@ export async function crawlView(root) {
       signal: ac.signal,
       onEvent: (event, data) => {
         if (event === "run_started") {
+          upsertRun(data.source_id, { status: "running" });
           logLine("", `<b>${esc(srcName(data.source_id))}</b> 开始抓取`);
           return;
         }
@@ -129,6 +137,7 @@ export async function crawlView(root) {
           const ins = data.stats?.inserted || 0;
           const ex = data.stats?.existed || 0;
           const fail = data.stats?.failed || 0;
+          upsertRun(data.source_id, { status: ok ? "completed" : "failed", success_count: ins, failed_count: fail });
           logLine(ok ? "ok" : "err", `<b>${esc(srcName(data.source_id))}</b> ${ok ? `完成, 新增 ${ins} 篇` : "失败"}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
           return;
         }
@@ -139,7 +148,8 @@ export async function crawlView(root) {
             percent.textContent = `${p}%`;
             fill.className = `progress-fill ${data.status === "completed" ? "ok" : data.status === "failed" ? "err" : data.status === "cancelled" ? "warn" : ""}`;
           }
-          if (data?.runs) renderRuns(data.runs);
+          if (data?.runs) { runs = data.runs; renderRuns(); }
+          if (data?.stage) logLine("", `<b>${esc(data.status)}</b> ${esc(data.stage)}`);
           if (data?.message) logLine("", `<b>${esc(data.status)}</b> ${esc(data.message)}`);
         }
         const TERMINAL = ["task_completed", "task_failed", "task_cancelled"];
@@ -196,7 +206,7 @@ export async function crawlView(root) {
             ${statusBadge(t.status)}
             <span style="color:var(--text-3);font-size:12.5px">${fmtDateTime(t.created_at)}</span>
             <span style="color:var(--text-3);font-size:12.5px">进度 ${t.progress}%</span>
-            <span style="color:var(--text-3);font-size:12.5px">源 ${(t.source_ids || []).length} 个 · 上限 ${t.max_items}</span>
+            <span style="color:var(--text-3);font-size:12.5px">${(t.source_ids || []).length ? `源 ${t.source_ids.length} 个` : "全部源"} · 上限 ${t.max_items}</span>
             <span style="flex:1"></span>
             ${t.status === "running" || t.status === "pending" ? `<button class="btn ghost danger sm" data-cancel="${t.id}">取消</button>` : ""}
             <button class="btn ghost sm" data-toggle="${t.id}">详情</button>
