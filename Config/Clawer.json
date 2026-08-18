@@ -116,7 +116,7 @@
     "zdnet": {
       "base_url": "https://www.zdnet.com",
       "content_xpath": "//div[contains(@class, \"article-body\")]",
-      "fetch_timeout": 40.0
+      "fetch_timeout": 25.0
     },
     "engadget": {
       "base_url": "https://www.engadget.com",
