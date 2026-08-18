@@ -70,15 +70,17 @@ export async function auditView(root) {
             </tr>`).join("")}
           </tbody></table></div>`;
       tableBox.querySelectorAll("[data-detail]").forEach((b) => b.addEventListener("click", () => {
-        const r = data.items.find((x) => x.id === Number(b.dataset.detail));
-        const json = JSON.stringify(r.detail || {}, null, 2);
-        if (b.nextElementSibling?.classList.contains("detail-row")) {
-          b.nextElementSibling.remove();
+        const row = b.closest("tr");
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains("detail-row")) {
+          next.remove();
           b.textContent = "查看";
           return;
         }
+        const r = data.items.find((x) => x.id === Number(b.dataset.detail));
+        const json = JSON.stringify(r.detail || {}, null, 2);
         b.textContent = "收起";
-        b.insertAdjacentHTML("afterend", `<tr class="detail-row"><td colspan="7"><pre class="detail-json">${esc(json)}</pre></td></tr>`);
+        row.insertAdjacentHTML("afterend", `<tr class="detail-row"><td colspan="7"><pre class="detail-json">${esc(json)}</pre></td></tr>`);
       }));
       pagerBox.innerHTML = pager(data.page, data.pages, data.total, go);
       pagerBox.querySelectorAll("[data-pg]").forEach((b) => b.addEventListener("click", () => go(Number(b.dataset.pg))));
