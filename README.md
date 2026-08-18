@@ -95,7 +95,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 
 统一响应 `{success, data, error}`,错误码:bad_request/unauthorized/forbidden/not_found/conflict/validation_error/rate_limited/internal_error/upstream_error。
 
-**前端**:`Client/` 原生 HTML/CSS/JS 单页应用(零构建),由 FastAPI 静态挂载至 `/` — 启动服务后直接访问 `http://127.0.0.1:8000/` 即可使用(无需另起静态服务器)。功能:登录/注册、文章浏览与搜索、抓取任务(SSE 实时进度)、简报生成与阅读、新闻源管理(admin)、审计日志(admin)、平台浏览;双主题跟随系统(prefers-color-scheme),顶栏可手动覆盖。
+**前端**:`Client/` 原生 HTML/CSS/JS 单页应用(零构建),由 FastAPI 静态挂载至 `/` — 启动服务后直接访问 `http://127.0.0.1:8000/` 即可使用(无需另起静态服务器)。功能:登录/注册、文章浏览与搜索、抓取任务(SSE 实时进度:当前源文章进度 + 源进度双进度条 + 最新动作)、简报生成与阅读、新闻源管理(admin)、审计日志(admin);双主题跟随系统(prefers-color-scheme),顶栏可手动覆盖。
 
 ## 配置与密钥
 

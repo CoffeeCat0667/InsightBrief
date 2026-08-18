@@ -21,6 +21,11 @@
 - **前端 SSE 字段错读**: crawl.js `run_finished` 原读不存在的 `stats.ok`, 改读 `stats.inserted/existed/failed`; crawl/brief 两视图终态事件后自动刷新历史/存档列表
 - **分页计数 "第 1 / NaN 页"**: `Page.pages` 原为普通 `@property`, Pydantic v2 序列化默认不含 → 响应缺 `pages` 字段; 改 `@computed_field`(schemas/common.py), 全部分页端点一次性修复, 前端 `第 ${page} / ${pages} 页 · 共 ${total} 条` 恢复正确
 - **抓取页实时面板改进**: run 徽章链改本地状态驱动(run_started 立即显示"xx 抓取中", run_finished 即更新计数, 不再等 task_update); 历史行 source_ids 为空(全源任务)显示"全部源"而非"源 0 个"; task_update 的 stage 输出到事件日志 — 全量 27 源任务首源完成前不再"看起来卡死"(首源耗时可达 10 分钟+)
+- **抓取页双进度条 + 最新动作行**(0e1a911 后续批次):
+  - 进度条拆二: 「当前源文章进度」(done/total, run_progress 事件每篇更新)与「源进度」(已完成源数/总数, task_update 更新)
+  - 后端: `ingest.insert_articles_from_links/crawl_and_ingest` 新增 `on_progress(processed, total)` 回调(每篇处理含失败/跳过均触发), `task_manager._execute` 传回调发布 `run_progress` 事件(载荷含 source_id/index/total_sources/done/total)
+  - 实时面板新增最新动作行(`.now-line`): "正在抓取 搜狐新闻: 12/25 篇 (第 2/27 源)" 随事件实时刷新
+  - **移除「平台」选项卡**: 导航 7 视图 → 6 视图, `Client/js/views/platforms.js` 删除(后端 /api/platforms 保留)
 
 ### 其他
 

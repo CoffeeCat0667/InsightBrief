@@ -344,15 +344,30 @@ class TaskManager:
             "sources": {"total": total, "ok": 0, "failed": 0},
             "articles": {"discovered": 0, "inserted": 0, "existed": 0, "failed": 0},
         }
-        for sid in source_ids:
+        for idx, sid in enumerate(source_ids):
             if self._cancel_requested(task_id, kind):
                 break
             self._mark_run(task_id, sid, running=True)
-            self._emit(task_id, "run_started", {"source_id": sid}, kind=kind)
+            self._emit(task_id, "run_started", {"source_id": sid, "index": idx, "total_sources": total}, kind=kind)
+
+            def on_run_progress(done: int, item_total: int, _sid=sid, _idx=idx):
+                self._emit(
+                    task_id,
+                    "run_progress",
+                    {
+                        "source_id": _sid,
+                        "index": _idx,
+                        "total_sources": total,
+                        "done": done,
+                        "total": item_total,
+                    },
+                    kind=kind,
+                )
+
             try:
                 from .ingest import crawl_and_ingest
 
-                stats = crawl_and_ingest(sid, max_items=max_items)
+                stats = crawl_and_ingest(sid, max_items=max_items, on_progress=on_run_progress)
                 run_status = TaskStatus.COMPLETED.value
                 aggregate["sources"]["ok"] += 1
             except Exception as exc:

@@ -7,7 +7,6 @@ import { crawlView } from "./views/crawl.js";
 import { briefView } from "./views/brief.js";
 import { sourcesView } from "./views/sources.js";
 import { auditView } from "./views/audit.js";
-import { platformsView } from "./views/platforms.js";
 
 const THEME_KEY = "ib_theme"; // auto | light | dark
 
@@ -16,7 +15,6 @@ const NAV = [
   { hash: "brief", icon: "i-brief", label: "简报" },
   { hash: "crawl", icon: "i-crawl", label: "抓取任务" },
   { hash: "sources", icon: "i-source", label: "新闻源" },
-  { hash: "platforms", icon: "i-server", label: "平台" },
   { hash: "audit", icon: "i-audit", label: "审计日志", admin: true },
 ];
 
@@ -25,7 +23,6 @@ const VIEWS = {
   brief: briefView,
   crawl: crawlView,
   sources: sourcesView,
-  platforms: platformsView,
   audit: auditView,
 };
 

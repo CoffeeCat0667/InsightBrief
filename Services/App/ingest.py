@@ -161,14 +161,19 @@ def insert_articles_from_links(
     links,
     *,
     max_items: int = 30,
+    on_progress=None,
 ) -> Dict[str, int]:
     """批量落库: 摘要型源直接入库, 其余逐篇抓详情页落库 (单篇失败不中断)。
 
+    on_progress(processed, total): 每处理一篇 (含失败/跳过) 调用一次, 供
+    任务运行时推送源内文章级进度。
     返回统计 {discovered, inserted, existed, failed}。
     """
     stats = {"discovered": len(links), "inserted": 0, "existed": 0, "failed": 0}
     platform_ids = _platform_ids_of(source_id)
     summary_only = not any(find_crawler_class(p) for p in platform_ids)
+    total = min(len(links), max_items)
+    processed = 0
 
     for link in list(links)[:max_items]:
         try:
@@ -186,11 +191,20 @@ def insert_articles_from_links(
         except Exception as exc:  # 单篇失败不影响批次
             logger.warning("[%s] 落库失败 %s: %s", source_id, link.url, exc)
             stats["failed"] += 1
+        finally:
+            processed += 1
+            if on_progress:
+                on_progress(processed, total)
     return stats
 
 
-def crawl_and_ingest(source_id: str, *, max_items: int = 30) -> Dict[str, int]:
-    """完整管线: discover -> 逐篇抓取 -> 落库 (独立会话)。"""
+def crawl_and_ingest(
+    source_id: str, *, max_items: int = 30, on_progress=None
+) -> Dict[str, int]:
+    """完整管线: discover -> 逐篇抓取 -> 落库 (独立会话)。
+
+    on_progress(processed, total): 源内文章级进度回调 (透传 insert_articles_from_links)。
+    """
     from Services.discovery import discover_links
 
     links = discover_links(source_id)
@@ -198,7 +212,9 @@ def crawl_and_ingest(source_id: str, *, max_items: int = 30) -> Dict[str, int]:
         logger.info("[%s] 未发现链接", source_id)
         return {"discovered": 0, "inserted": 0, "existed": 0, "failed": 0}
     with SessionLocal() as session:
-        stats = insert_articles_from_links(session, source_id, links, max_items=max_items)
+        stats = insert_articles_from_links(
+            session, source_id, links, max_items=max_items, on_progress=on_progress
+        )
         session.commit()
     logger.info("[%s] 落库完成: %s", source_id, stats)
     return stats

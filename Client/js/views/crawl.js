@@ -65,13 +65,6 @@ export async function crawlView(root) {
 
   // ---- SSE 实时进度 ----
   let ac = null;
-  let runs = [];
-  const upsertRun = (sid, patch) => {
-    const i = runs.findIndex((r) => r.source_id === sid);
-    if (i >= 0) runs[i] = { ...runs[i], ...patch };
-    else runs.push({ source_id: sid, ...patch });
-    renderRuns();
-  };
   async function startCrawl() {
     const body = { max_items: Number(root.querySelector("#max-items").value) || 30 };
     if (selected.size) body.source_ids = [...selected];
@@ -97,10 +90,16 @@ export async function crawlView(root) {
         <div class="section-title" style="margin:0">任务 #${task.id} 实时进度 <span class="badge info"><span class="dot"></span>SSE 已连接</span></div>
         <button class="btn ghost danger sm" id="live-cancel">取消任务</button>
       </div>
+      <div class="now-line" id="lp-now"></div>
       <div class="progress-row">
-        <span class="stage-label">总体进度</span>
+        <span class="stage-label">当前源文章进度</span>
         <div class="progress-track"><div class="progress-fill" id="lp-fill" style="width:0%"></div></div>
-        <span class="percent" id="lp-percent">0%</span>
+        <span class="percent" id="lp-percent">0/0</span>
+      </div>
+      <div class="progress-row">
+        <span class="stage-label">源进度</span>
+        <div class="progress-track"><div class="progress-fill" id="lp-fill-src" style="width:0%"></div></div>
+        <span class="percent" id="lp-percent-src">0%</span>
       </div>
       <div class="run-strip" id="lp-runs"></div>
       <div class="event-log" id="lp-log"></div>`;
@@ -108,8 +107,12 @@ export async function crawlView(root) {
 
     const fill = panel.querySelector("#lp-fill");
     const percent = panel.querySelector("#lp-percent");
+    const fillSrc = panel.querySelector("#lp-fill-src");
+    const percentSrc = panel.querySelector("#lp-percent-src");
+    const nowLine = panel.querySelector("#lp-now");
     const strip = panel.querySelector("#lp-runs");
     const log = panel.querySelector("#lp-log");
+    const setNow = (html) => { nowLine.innerHTML = html; };
     const logLine = (cls, html) => {
       const el = document.createElement("div");
       el.className = `ev ${cls}`;
@@ -123,13 +126,34 @@ export async function crawlView(root) {
         return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${r.success_count || 0}/${(r.success_count || 0) + (r.failed_count || 0)}</span>`;
       }).join("") || `<span class="empty-hint" style="padding:8px 0">等待源任务开始...</span>`;
     };
+    let runs = [];
+    const upsertRun = (sid, patch) => {
+      const i = runs.findIndex((r) => r.source_id === sid);
+      if (i >= 0) runs[i] = { ...runs[i], ...patch };
+      else runs.push({ source_id: sid, ...patch });
+      renderRuns();
+    };
 
     streamEvents(`/api/tasks/${task.id}/events`, {
       signal: ac.signal,
       onEvent: (event, data) => {
         if (event === "run_started") {
           upsertRun(data.source_id, { status: "running" });
-          logLine("", `<b>${esc(srcName(data.source_id))}</b> 开始抓取`);
+          const seq = (data.index ?? 0) + 1;
+          const tot = data.total_sources ?? "?";
+          setNow(`<b>${esc(srcName(data.source_id))}</b> 开始抓取 <span style="color:var(--text-3)">(第 ${seq}/${tot} 源)</span>`);
+          fill.style.width = "0%";
+          percent.textContent = `0/${data.total ?? 0}`;
+          logLine("", `<b>${esc(srcName(data.source_id))}</b> 开始抓取 (第 ${seq}/${tot} 源)`);
+          return;
+        }
+        if (event === "run_progress") {
+          const pct = data.total ? Math.round((data.done / data.total) * 100) : 100;
+          fill.style.width = `${pct}%`;
+          percent.textContent = `${data.done}/${data.total}`;
+          const seq = (data.index ?? 0) + 1;
+          const tot = data.total_sources ?? "?";
+          setNow(`正在抓取 <b>${esc(srcName(data.source_id))}</b>: <b>${data.done}/${data.total}</b> 篇 <span style="color:var(--text-3)">(第 ${seq}/${tot} 源)</span>`);
           return;
         }
         if (event === "run_finished") {
@@ -138,18 +162,29 @@ export async function crawlView(root) {
           const ex = data.stats?.existed || 0;
           const fail = data.stats?.failed || 0;
           upsertRun(data.source_id, { status: ok ? "completed" : "failed", success_count: ins, failed_count: fail });
+          fill.style.width = "100%";
+          percent.textContent = "完成";
+          setNow(`<b>${esc(srcName(data.source_id))}</b> ${ok ? `完成, 新增 ${ins} 篇` : "失败"}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
           logLine(ok ? "ok" : "err", `<b>${esc(srcName(data.source_id))}</b> ${ok ? `完成, 新增 ${ins} 篇` : "失败"}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
           return;
         }
         if (event === "task_update" || event.startsWith("task_")) {
           if (data?.progress !== undefined) {
             const p = Math.round(data.progress);
-            fill.style.width = `${p}%`;
-            percent.textContent = `${p}%`;
-            fill.className = `progress-fill ${data.status === "completed" ? "ok" : data.status === "failed" ? "err" : data.status === "cancelled" ? "warn" : ""}`;
+            fillSrc.style.width = `${p}%`;
+            percentSrc.textContent = `${p}%`;
+            fillSrc.className = `progress-fill ${data.status === "completed" ? "ok" : data.status === "failed" ? "err" : data.status === "cancelled" ? "warn" : ""}`;
           }
           if (data?.runs) { runs = data.runs; renderRuns(); }
-          if (data?.stage) logLine("", `<b>${esc(data.status)}</b> ${esc(data.stage)}`);
+          if (data?.stage) {
+            const m = data.stage.match(/\((\d+)\/(\d+)\)$/);
+            if (m) {
+              percentSrc.textContent = `${Math.round((Number(m[1]) / Number(m[2])) * 100)}%`;
+              fillSrc.style.width = `${Math.round((Number(m[1]) / Number(m[2])) * 100)}%`;
+            }
+            setNow(esc(data.stage));
+            logLine("", `<b>${esc(data.status)}</b> ${esc(data.stage)}`);
+          }
           if (data?.message) logLine("", `<b>${esc(data.status)}</b> ${esc(data.message)}`);
         }
         const TERMINAL = ["task_completed", "task_failed", "task_cancelled"];

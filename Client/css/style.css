@@ -376,6 +376,15 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
 .stage-label { min-width: 90px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 .percent { min-width: 40px; text-align: right; font-family: var(--mono); font-size: 13px; color: var(--text-2); }
 
+/* 最新动作行 */
+.now-line {
+  margin-bottom: 12px; padding: 8px 12px; border-radius: 8px;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  font-size: 13.5px; color: var(--text-2);
+  animation: ev-in 0.25s ease;
+}
+.now-line b { color: var(--accent); font-weight: 600; }
+
 .run-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .run-dot {
   display: inline-flex; align-items: center; gap: 6px;
