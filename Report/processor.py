@@ -289,10 +289,14 @@ class BriefProcessor:
 
     # ---------------------------------------------------------- 数据
     def _load_articles(self, params: Dict[str, Any]) -> List[Any]:
+        from sqlalchemy.orm import joinedload
+
         from Services.App.models import Article, Source
 
         stmt = (
             select(Article)
+            # 预加载 contents, 防止 session 关闭后懒加载抛 DetachedInstanceError
+            .options(joinedload(Article.contents))
             .join(Source, Article.source_id == Source.id)
             .where(Source.enabled.is_(True))
         )
@@ -306,7 +310,7 @@ class BriefProcessor:
             stmt = stmt.where(Article.crawled_at <= params["end_time"])
         stmt = stmt.order_by(Article.crawled_at.desc(), Article.id.desc())
         with _session() as session:
-            rows = session.scalars(stmt).all()
+            rows = session.scalars(stmt).unique().all()
         limit = int(params.get("max_items") or 0) or 200
         return list(rows[:limit])
 
