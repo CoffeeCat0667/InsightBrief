@@ -76,7 +76,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 ```
 
 - 交互 API 文档: http://127.0.0.1:8000/docs
-- 初始管理员: `ADMIN_USERNAME`/`ADMIN_PASSWORD` 环境变量, 默认 `admin` / `admin123456`(生产必须配置 `JWT_SECRET`)
+- 初始管理员: 空库启动时必须设置 `ADMIN_PASSWORD`（可选 `ADMIN_USERNAME`,默认 `admin`）; 未设置时服务拒绝初始化,避免默认凭据风险。生产还必须配置 `JWT_SECRET`。
 - CLI 仍可用: `python -m Services.CLI.main` 或 `python Services/CLI/main.py`(菜单输入媒体编号抓取最新一条)
 
 ## API 概览
@@ -101,7 +101,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 
 所有配置只从 `Config/config.py` 加载(`Config/*.json` + lru_cache + 必填校验):
 
-- `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、重试参数(attempts/wait_seconds)、playwright、generic 阈值 — **不含任何 timeout(超时已平台化)**
+- `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、重试参数(attempts/wait_seconds)、playwright、generic 阈值、登录失败限流与可信反代配置 — **不含任何抓取 timeout(超时已平台化)**
 - `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)**
 - `Config/Services.json`:27 源注册表 + platform/link 正则 + translator + domestic_source_ids
 - `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数;`LLM_API_KEY` 环境变量可覆盖 api_key(启动同步生效);**决策 2026-08-18: api_key 保持明文 + env 覆盖, 不做密钥管理改造, 本地单机可接受, 生产部署时再评估**(DECISIONS §15-9)

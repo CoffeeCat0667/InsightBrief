@@ -39,18 +39,49 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123456")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+BCRYPT_MAX_PASSWORD_BYTES = 72
+# 仅用于不存在用户的恒时验证; 不是可登录账户的密码哈希。
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"InsightBrief login timing dummy", bcrypt.gensalt())
+
+
+def _password_bytes(password: str) -> bytes:
+    """校验 bcrypt 可安全处理的 UTF-8 密码字节数。"""
+    encoded = password.encode("utf-8")
+    if len(encoded) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(f"密码不能超过 {BCRYPT_MAX_PASSWORD_BYTES} 个 UTF-8 字节")
+    return encoded
 
 
 def hash_password(password: str) -> str:
-    """bcrypt 哈希 (bcrypt 4.x 仅处理前 72 字节, 超长截断)。"""
-    return bcrypt.hashpw(password.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
+    """bcrypt 哈希; 拒绝超出 bcrypt 72 字节限制的密码, 不静默截断。"""
+    return bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(
-        password.encode("utf-8")[:72], password_hash.encode("utf-8")
-    )
+    """验证密码; 超长输入也执行 bcrypt 后再返回失败。"""
+    try:
+        encoded = _password_bytes(password)
+    except ValueError:
+        # 保持与不存在用户的 dummy 校验相近的成本, 同时拒绝超长密码。
+        encoded = b"\x00" * BCRYPT_MAX_PASSWORD_BYTES
+        valid_length = False
+    else:
+        valid_length = True
+    try:
+        matched = bcrypt.checkpw(encoded, password_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+    return valid_length and matched
+
+
+def verify_dummy_password(password: str) -> None:
+    """对不存在的用户执行同成本 bcrypt, 减少用户名枚举计时差。"""
+    try:
+        encoded = _password_bytes(password)
+    except ValueError:
+        encoded = b"password exceeds bcrypt byte limit"
+    bcrypt.checkpw(encoded, _DUMMY_PASSWORD_HASH)
 
 
 def create_access_token(user_id: int) -> str:
@@ -128,9 +159,13 @@ def seed_roles(session: Session) -> None:
 
 
 def seed_admin(session: Session) -> None:
-    """无任何用户时创建初始 admin (凭据来自 ADMIN_* 环境变量)。"""
+    """无任何用户时创建初始 admin; 新库必须显式提供管理员密码。"""
     if session.scalar(select(User).limit(1)) is not None:
         return
+    if not ADMIN_PASSWORD:
+        raise RuntimeError(
+            "未配置 ADMIN_PASSWORD, 拒绝创建初始管理员; 请设置强密码后重启服务"
+        )
     admin_role = session.scalar(select(Role).where(Role.code == "admin"))
     session.add(
         User(

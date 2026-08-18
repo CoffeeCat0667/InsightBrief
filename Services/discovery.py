@@ -191,17 +191,18 @@ def _find_content(node: ElementTree.Element) -> str:
 # ================================================================
 # 栏目页发现 (首页 HTML + 详情链接形态正则)
 # ================================================================
-# 广告/推广容器类名特征 (小写子串; 81.cn banner 轮播等横幅均落此排除)
-_AD_HINT_CLASSES = (
-    " banner", " ad", " ads", " adver", " adbox", " promo", " tui", " gg",
+# 广告/推广 class token; 仅在单词/连字符边界匹配, 防止 ``advanced`` 等真实类名误伤。
+_AD_HINT_RE = re.compile(
+    r"(?<![a-z0-9])(?:banner|ad|ads|advert(?:isement|ising)?|adbox|promo|tui|gg)(?![a-z0-9])",
+    re.IGNORECASE,
 )
 
 
 def _in_ad_container(a) -> bool:
-    """链接所在祖先元素带广告/推广类名则跳过 (横幅/推广位误提取根因修复)。"""
-    for ancestor in a.xpath("ancestor::*[@class]"):
-        cls = " " + (ancestor.xpath("@class").get() or "").lower() + " "
-        if any(hint in cls for hint in _AD_HINT_CLASSES):
+    """链接自身或祖先元素带广告/推广 class token 则跳过。"""
+    for node in a.xpath("ancestor-or-self::*[@class]"):
+        cls = node.xpath("@class").get() or ""
+        if _AD_HINT_RE.search(cls):
             return True
     return False
 
@@ -229,20 +230,23 @@ def _extract_column(url: str, source_id: str, pattern: re.Pattern) -> List[Artic
     except requests.RequestException as exc:
         logging.warning("[%s] 栏目页获取失败, 跳过: %s", source_id, exc)
         return []
-    seen = set()
+    candidates = []
     ad_urls = set()
-    links = []
     for a in Selector(text=html).xpath("//a[@href]"):
         href = (a.xpath("@href").get() or "").strip()
         if not href:
             continue
         href = _normalize_href(href, url, pattern)
-        if href is None or href in seen:
+        if href is None:
             continue
         if _in_ad_container(a):
             ad_urls.add(href)
-            continue
-        if href in ad_urls:
+        else:
+            candidates.append(href)
+    seen = set()
+    links = []
+    for href in candidates:
+        if href in ad_urls or href in seen:
             continue
         seen.add(href)
         links.append(ArticleLink(url=href, title="", publish_time="", source=source_id))

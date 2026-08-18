@@ -144,6 +144,25 @@ def create_crawl_task(
     session.flush()
     session.commit()
     task = session.get(CrawlTask, task.id)
+    try:
+        manager.dispatch(task.id, kind="crawl")
+    except RuntimeError:
+        write_audit(
+            user_id=user.id,
+            action="crawl_task.create",
+            target_type="crawl_task",
+            target_id=task.id,
+            detail={
+                "source_ids": body.source_ids,
+                "max_items": body.max_items,
+                "dispatch_failed": True,
+            },
+            ip=client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "internal_error", "message": "任务执行器不可用"},
+        )
     write_audit(
         user_id=user.id,
         action="crawl_task.create",
@@ -152,7 +171,6 @@ def create_crawl_task(
         detail={"source_ids": body.source_ids, "max_items": body.max_items},
         ip=client_ip(request),
     )
-    manager.dispatch(task.id, kind="crawl")
     return ok(CrawlTaskRead.model_validate(task))
 
 
@@ -206,9 +224,9 @@ def cancel_crawl_task(
     request: Request,
     body: Optional[TaskCancelRequest] = None,
     session: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
-    """请求取消任务: 已终态返回当前状态 (requested=False), 否则标记取消。"""
+    """请求取消任务 (admin); 已终态返回当前状态 (requested=False)。"""
     task = session.get(CrawlTask, task_id)
     if task is None:
         raise HTTPException(
@@ -220,14 +238,15 @@ def cancel_crawl_task(
         requested = True
     else:
         requested = False
-    write_audit(
-        user_id=user.id,
-        action="crawl_task.cancel",
-        target_type="crawl_task",
-        target_id=task_id,
-        detail={"requested": requested, "task_status": task.status},
-        ip=client_ip(request),
-    )
+    if requested:
+        write_audit(
+            user_id=user.id,
+            action="crawl_task.cancel",
+            target_type="crawl_task",
+            target_id=task_id,
+            detail={"requested": True, "task_status": task.status},
+            ip=client_ip(request),
+        )
     return ok(
         TaskCancelRead(task_id=task_id, task_status=task.status, requested=requested)
     )

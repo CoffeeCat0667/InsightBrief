@@ -15,6 +15,10 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     email: Optional[EmailStr] = None
 
+    def model_post_init(self, __context) -> None:
+        if len(self.password.encode("utf-8")) > 72:
+            raise ValueError("密码不能超过 72 个 UTF-8 字节")
+
 
 class LoginRequest(BaseModel):
     """登录请求。"""

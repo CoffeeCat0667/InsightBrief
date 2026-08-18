@@ -266,7 +266,35 @@ class TaskManager:
                 "seq": 0,
                 "events": [],
             }
-        self._executor.submit(self._run_task, task_id, processor, kind)
+        try:
+            self._executor.submit(self._run_task, task_id, processor, kind)
+        except Exception as exc:
+            logger.exception("[task %s] 无法提交任务到 worker", task_id)
+            with self._lock:
+                self._handles.pop(key, None)
+            self._mark_dispatch_failed(task_id, kind, exc)
+            raise
+
+    def _mark_dispatch_failed(self, task_id: int, kind: str, exc: Exception) -> None:
+        """worker 提交失败时把已落库任务收敛到 failed, 防止 pending 残留。"""
+        model = CrawlTask
+        if kind == KIND_BRIEF:
+            from .models import BriefTask
+
+            model = BriefTask
+        try:
+            with SessionLocal() as session:
+                task = session.get(model, task_id)
+                if task is None:
+                    return
+                task.status = TaskStatus.FAILED.value
+                task.progress = 100
+                task.finished_at = datetime.now(timezone.utc)
+                task.error = {"code": "internal_error", "message": "任务提交失败"}
+                task.message = "任务提交失败"
+                session.commit()
+        except Exception:
+            logger.exception("[task %s] 无法记录 worker 提交失败", task_id)
 
     def request_cancel(self, task_id: int, kind: str = KIND_CRAWL) -> bool:
         """请求取消; 返回 False 表示任务不存在或已终态 (由路由转 404/200)。"""

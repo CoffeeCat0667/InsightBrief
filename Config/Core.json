@@ -26,5 +26,12 @@
     "retry_delay": 1.0,
     "retry_via_proxy": true,
     "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  },
+  "auth": {
+    "login_rate_limit": {
+      "max_attempts": 5,
+      "window_seconds": 300
+    },
+    "trusted_proxy_ips": []
   }
 }

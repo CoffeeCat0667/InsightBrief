@@ -49,7 +49,7 @@ class AuditLog(Base):
     user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     target_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     target_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     detail: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

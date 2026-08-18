@@ -7,6 +7,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...audit_logs import client_ip, write_audit
@@ -23,8 +24,10 @@ from ..security import (
     create_access_token,
     get_current_user,
     hash_password,
+    verify_dummy_password,
     verify_password,
 )
+from ..login_rate_limit import login_rate_limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -36,7 +39,7 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
         write_audit(
             action="user.register_failed",
             target_type="user",
-            detail={"username": req.username, "email": req.email, "reason": "用户名已存在"},
+            detail={"reason": "用户名已存在"},
             ip=client_ip(request),
         )
         raise HTTPException(
@@ -47,7 +50,7 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
         write_audit(
             action="user.register_failed",
             target_type="user",
-            detail={"username": req.username, "email": req.email, "reason": "邮箱已被注册"},
+            detail={"reason": "邮箱已被注册"},
             ip=client_ip(request),
         )
         raise HTTPException(
@@ -63,13 +66,26 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
         is_active=True,
     )
     session.add(user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        write_audit(
+            action="user.register_failed",
+            target_type="user",
+            detail={"reason": "用户名或邮箱已被注册"},
+            ip=client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": ErrorCode.CONFLICT, "message": "用户名或邮箱已被注册"},
+        )
     write_audit(
         user_id=user.id,
         action="user.register",
         target_type="user",
         target_id=user.id,
-        detail={"username": req.username, "email": req.email},
+        detail={},
         ip=client_ip(request),
     )
     return ok(UserRead.model_validate(user))
@@ -82,39 +98,67 @@ def login(
     session: Session = Depends(get_db),
 ):
     """OAuth2 表单登录 -> Bearer Token (OpenAPI 授权按钮可直接用)。"""
+    ip = client_ip(request) or "unknown"
+    retry_after = login_rate_limiter.is_limited(ip)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(retry_after)},
+            detail={"code": ErrorCode.RATE_LIMITED, "message": "登录失败次数过多, 请稍后再试"},
+        )
     user = session.scalar(select(User).where(User.username == form.username))
-    if user is None or not verify_password(form.password, user.password_hash):
+    if user is None:
+        verify_dummy_password(form.password)
+        valid = False
+    else:
+        valid = verify_password(form.password, user.password_hash)
+    if not valid:
+        limited, retry_after = login_rate_limiter.record_failure(ip)
         write_audit(
             action="user.login_failed",
             target_type="user",
-            detail={"username": form.username, "reason": "用户名或密码错误"},
-            ip=client_ip(request),
+            detail={"reason": "用户名或密码错误"},
+            ip=ip,
         )
+        if limited:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": str(retry_after or 1)},
+                detail={"code": ErrorCode.RATE_LIMITED, "message": "登录失败次数过多, 请稍后再试"},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": ErrorCode.UNAUTHORIZED, "message": "用户名或密码错误"},
         )
     if not user.is_active:
+        limited, retry_after = login_rate_limiter.record_failure(ip)
         write_audit(
             user_id=user.id,
             action="user.login_failed",
             target_type="user",
             target_id=user.id,
-            detail={"username": form.username, "reason": "账号已被禁用"},
-            ip=client_ip(request),
+            detail={"reason": "账号已被禁用"},
+            ip=ip,
         )
+        if limited:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": str(retry_after or 1)},
+                detail={"code": ErrorCode.RATE_LIMITED, "message": "登录失败次数过多, 请稍后再试"},
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": ErrorCode.FORBIDDEN, "message": "账号已被禁用"},
         )
+    login_rate_limiter.reset(ip)
     token = create_access_token(user.id)
     write_audit(
         user_id=user.id,
         action="user.login",
         target_type="user",
         target_id=user.id,
-        detail={"username": form.username},
-        ip=client_ip(request),
+        detail={},
+        ip=ip,
     )
     return ok(
         TokenResponse(

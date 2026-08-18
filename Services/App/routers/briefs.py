@@ -66,6 +66,23 @@ def create_brief_task(
     session.flush()
     session.commit()
     task = session.get(BriefTask, task.id)
+    from Report import brief_processor
+
+    try:
+        manager.dispatch(task.id, brief_processor, kind="brief")
+    except RuntimeError:
+        write_audit(
+            user_id=user.id,
+            action="brief_task.create",
+            target_type="brief_task",
+            target_id=task.id,
+            detail={**body.model_dump(exclude_none=True), "dispatch_failed": True},
+            ip=client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "internal_error", "message": "任务执行器不可用"},
+        )
     write_audit(
         user_id=user.id,
         action="brief_task.create",
@@ -74,9 +91,6 @@ def create_brief_task(
         detail=body.model_dump(exclude_none=True),
         ip=client_ip(request),
     )
-    from Report import brief_processor
-
-    manager.dispatch(task.id, brief_processor, kind="brief")
     return ok(BriefTaskRead.model_validate(task))
 
 
@@ -132,9 +146,9 @@ def cancel_brief_task(
     request: Request,
     body: Optional[TaskCancelRequest] = None,
     session: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
-    """请求取消简报任务 (阶段间生效)。"""
+    """请求取消简报任务 (admin, 阶段间生效)。"""
     task = session.get(BriefTask, task_id)
     if task is None:
         raise HTTPException(
@@ -146,14 +160,15 @@ def cancel_brief_task(
         requested = True
     else:
         requested = False
-    write_audit(
-        user_id=user.id,
-        action="brief_task.cancel",
-        target_type="brief_task",
-        target_id=task_id,
-        detail={"requested": requested, "task_status": task.status},
-        ip=client_ip(request),
-    )
+    if requested:
+        write_audit(
+            user_id=user.id,
+            action="brief_task.cancel",
+            target_type="brief_task",
+            target_id=task_id,
+            detail={"requested": True, "task_status": task.status},
+            ip=client_ip(request),
+        )
     return ok(
         TaskCancelRead(task_id=task_id, task_status=task.status, requested=requested)
     )

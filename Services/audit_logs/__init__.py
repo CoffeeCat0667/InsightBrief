@@ -2,8 +2,8 @@
 """审计日志写入: 关键操作留痕 (audit_logs 表, 只增不删)。
 
 - write_audit: 独立会话提交, 任何失败只记日志不向上抛 — 审计绝不炸主业务。
-- client_ip: 客户端 IP 采集 — client.host 优先, X-Forwarded-For 首段兜底
-  (本地 uvicorn 直连时 request.client.host 即真实来源, 反代场景兜底兼容)。
+- client_ip: 仅当直连地址位于配置的可信反代名单时才采信 X-Forwarded-For;
+  未配置可信反代时始终记录 socket 对端地址, 防止客户端伪造审计 IP。
 - action 命名规范: {object}.{verb} (失败加 _failed 后缀), 见各调用点。
 """
 from __future__ import annotations
@@ -21,15 +21,20 @@ logger = logging.getLogger(__name__)
 
 
 def client_ip(request: Request) -> Optional[str]:
-    """采集客户端 IP: client.host 优先, X-Forwarded-For 首段兜底。"""
-    if request.client is not None:
-        return request.client.host
+    """采集客户端 IP; 只信任显式配置的反代发送的 X-Forwarded-For。"""
+    peer_ip = request.client.host if request.client is not None else None
+    if peer_ip is None:
+        return None
+    from Config.config import core_config
+
+    trusted_proxy_ips = set(core_config()["auth"]["trusted_proxy_ips"])
+    if peer_ip not in trusted_proxy_ips:
+        return peer_ip
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
-    return None
+    if not forwarded:
+        return peer_ip
+    first = forwarded.split(",")[0].strip()
+    return first or peer_ip
 
 
 def write_audit(

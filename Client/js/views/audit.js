@@ -71,9 +71,13 @@ export async function auditView(root) {
           </tbody></table></div>`;
       tableBox.querySelectorAll("[data-detail]").forEach((b) => b.addEventListener("click", () => {
         const row = b.closest("tr");
-        const next = row.nextElementSibling;
+        let next = row.nextElementSibling;
         if (next && next.classList.contains("detail-row")) {
-          next.remove();
+          while (next && next.classList.contains("detail-row")) {
+            const doomed = next;
+            next = next.nextElementSibling;
+            doomed.remove();
+          }
           b.textContent = "查看";
           return;
         }

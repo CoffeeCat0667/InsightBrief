@@ -16,6 +16,8 @@ CONFIG_DIR = Path(__file__).resolve().parent
 
 _CORE_ENV_PATHS = {
     ("proxy", "default"): "CRAWL_PROXY",
+    ("auth", "login_rate_limit", "max_attempts"): "AUTH_LOGIN_MAX_ATTEMPTS",
+    ("auth", "login_rate_limit", "window_seconds"): "AUTH_LOGIN_WINDOW_SECONDS",
 }
 
 _DB_ENV_PATHS = {
@@ -70,8 +72,34 @@ def _require(data: Dict[str, Any], path: str, name: str) -> None:
 def core_config() -> Dict[str, Any]:
     """Core.json: 代理/UA/超时重试/路径/playwright/generic 阈值。"""
     data = _apply_env(_load("Core"), _CORE_ENV_PATHS)
-    for key in ("proxy.default", "user_agent", "fetch.attempts", "paths.save_dir"):
+    trusted_proxy_ips = os.environ.get("TRUSTED_PROXY_IPS")
+    if trusted_proxy_ips is not None:
+        data.setdefault("auth", {})["trusted_proxy_ips"] = [
+            ip.strip() for ip in trusted_proxy_ips.split(",") if ip.strip()
+        ]
+    for key in (
+        "proxy.default",
+        "user_agent",
+        "fetch.attempts",
+        "paths.save_dir",
+        "auth.login_rate_limit.max_attempts",
+        "auth.login_rate_limit.window_seconds",
+        "auth.trusted_proxy_ips",
+    ):
         _require(data, key, "Core.json")
+    try:
+        limit = int(data["auth"]["login_rate_limit"]["max_attempts"])
+        window = int(data["auth"]["login_rate_limit"]["window_seconds"])
+    except (TypeError, ValueError, KeyError) as exc:
+        raise ConfigError("Core.json auth.login_rate_limit 必须为整数") from exc
+    if limit < 1 or window < 1:
+        raise ConfigError("Core.json auth.login_rate_limit 必须为正整数")
+    if not isinstance(data["auth"]["trusted_proxy_ips"], list):
+        raise ConfigError("Core.json auth.trusted_proxy_ips 必须为列表")
+    data["auth"]["login_rate_limit"] = {
+        "max_attempts": limit,
+        "window_seconds": window,
+    }
     return data
 
 

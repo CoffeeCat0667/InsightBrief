@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **鉴权、审计与任务权限加固**:
+  - 抓取/简报任务取消端点改为 admin-only，普通用户不再能中断管理员任务；终态任务的无效取消不再写入噪音审计。
+  - 登录失败按客户端 IP 执行 Redis 共享滑动窗口限流（Redis 不可用时进程内降级），达到阈值返回 429 与 `Retry-After`；不存在用户仍执行 dummy bcrypt 校验，减少用户名计时枚举。
+  - bcrypt 密码改为拒绝超过 72 个 UTF-8 字节的输入，取消静默截断；空库初始化必须显式设置 `ADMIN_PASSWORD`，不再创建默认密码管理员。
+  - 认证审计 detail 不再写 username/email；迁移会清洗既有认证审计 PII，并为 `audit_logs.action` 新建索引。
+  - 仅当 socket 对端在 `trusted_proxy_ips` 配置中时才采信 `X-Forwarded-For`，防止直连客户端伪造审计来源 IP。
+  - 注册唯一键并发冲突改为 409；worker submit 失败时任务落为 failed，避免 pending 残留与成功创建审计不一致。
+- **栏目页广告过滤稳健化**: 广告识别覆盖链接自身及祖先的 class，采用边界匹配避免 `advanced` 等正常 class 被误伤；先完整收集广告 URL 再过滤候选，消除同 URL 出现顺序造成的漏网。
+
 ### 新增
 
 - **前端单页应用 `Client/`(原生 JS, 用户批准重启前端实现)**:

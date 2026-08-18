@@ -32,7 +32,7 @@ def list_audit_logs(
     stmt = select(AuditLog)
     if action:
         stmt = stmt.where(AuditLog.action == action)
-    if user_id:
+    if user_id is not None:
         stmt = stmt.where(AuditLog.user_id == user_id)
     total = (
         session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery()))

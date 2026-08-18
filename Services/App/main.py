@@ -133,6 +133,14 @@ app.include_router(audit_logs.router)
 app.include_router(translate.router)
 
 # 前端静态资源 (Client/ 单页应用; 挂载在 API 路由之后, 不遮挡 /api 与 /docs)
+# no-cache: SPA 迭代频繁, 防浏览器命中旧 JS/CSS 导致"修了没生效"假象
 _client_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Client")
 if os.path.isdir(_client_dir):
-    app.mount("/", StaticFiles(directory=_client_dir, html=True), name="static")
+
+    class _NoCacheStaticFiles(StaticFiles):
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            response.headers["Cache-Control"] = "no-cache"
+            return response
+
+    app.mount("/", _NoCacheStaticFiles(directory=_client_dir, html=True), name="static")
