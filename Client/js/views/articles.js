@@ -117,11 +117,13 @@ export async function articlesView(root) {
         c.type === "media"
           ? `<div class="content-block media">📷 ${esc(c.desc || "媒体")}: ${esc(c.content)}</div>`
           : `<div class="content-block">${esc(c.content)}</div>`).join("");
+      const cnInTitle = /[\u4e00-\u9fff]/.test((a.title || "") + (a.language || ""));
+      const isForeign = !cnInTitle;
       overlay.querySelector(".card").innerHTML = `
         <button class="icon-btn" style="position:absolute;right:14px;top:14px" aria-label="关闭">✕</button>
         <div class="detail-head">
-          <h2>${esc(a.translated_title || a.title)}</h2>
-          ${a.translated_title ? `<div style="color:var(--text-3);font-size:14px;margin-bottom:8px">${esc(a.title)}</div>` : ""}
+          <h2 id="dt-title">${esc(a.translated_title || a.title)}</h2>
+          ${a.translated_title ? `<div id="dt-sub" style="color:var(--text-3);font-size:14px;margin-bottom:8px">${esc(a.title)}</div>` : ""}
           <div class="detail-meta">
             <span>${esc(a.source_name || a.source_id)}</span>
             ${a.category ? catBadge(a.category) : ""}
@@ -129,14 +131,64 @@ export async function articlesView(root) {
             <span>语言: ${esc(a.language || "—")}</span>
             <span>发表于 ${fmtTime(a.publish_time)}</span>
           </div>
-          <a class="btn ghost sm" href="${esc(a.url)}" target="_blank" rel="noopener">查看原文 ↗</a>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <a class="btn ghost sm" href="${esc(a.url)}" target="_blank" rel="noopener">查看原文 ↗</a>
+            ${isForeign ? `<button class="btn ghost sm" id="tr-btn">翻译</button>` : ""}
+          </div>
         </div>
         <div class="detail-body">
           ${a.summary ? `<div><div class="section-title">AI 摘要</div><div class="content-block" style="color:var(--text-2)">${esc(a.summary)}</div></div>` : ""}
           ${a.translated_content ? `<div><div class="section-title">全文翻译</div><div class="translated-block">${esc(a.translated_content)}</div></div>` : ""}
-          <div><div class="section-title">原文内容 (${contents ? (a.contents || []).length : 0} 片段)</div>${contents || `<div class="empty-hint">此来源为摘要型, 未抓取正文片段</div>`}</div>
+          <div id="orig-box"><div class="section-title">原文内容 (${(a.contents || []).length} 片段)</div>${contents || `<div class="empty-hint">此来源为摘要型, 未抓取正文片段</div>`}</div>
         </div>`;
       overlay.querySelector("button").addEventListener("click", () => overlay.remove());
+
+      const trBtn = overlay.querySelector("#tr-btn");
+      if (trBtn) {
+        const origTitle = a.translated_title || a.title;
+        const origSub = a.translated_title ? a.title : "";
+        const origBody = overlay.querySelector("#orig-box").innerHTML;
+        const text = (a.contents || []).filter((c) => c.type !== "media").map((c) => c.content).join("\n\n").trim();
+        let showingCn = false;
+        trBtn.addEventListener("click", async () => {
+          if (!showingCn) {
+            if (!text) { toastErr("无正文可翻译"); return; }
+            trBtn.disabled = true;
+            trBtn.textContent = "翻译中... (长文约 1-2 分钟)";
+            try {
+              const r = await api.post("/api/translate", { text, title: a.title || undefined });
+              const cnTitle = r.translated_title || origTitle;
+              const cnBody = r.translated;
+              overlay.querySelector("#dt-title").textContent = cnTitle;
+              const sub = overlay.querySelector("#dt-sub");
+              if (sub) sub.textContent = a.title;
+              else if (a.title && cnTitle !== a.title) {
+                const subEl = document.createElement("div");
+                subEl.id = "dt-sub";
+                subEl.style.cssText = "color:var(--text-3);font-size:14px;margin-bottom:8px";
+                subEl.textContent = a.title;
+                overlay.querySelector("#dt-title").after(subEl);
+              }
+              overlay.querySelector("#orig-box").innerHTML =
+                `<div class="section-title">中文译文 (临时)</div><div class="translated-block">${cnBody.split(/\n{2,}/).map((p) => `<p style="margin:0 0 10px">${esc(p)}</p>`).join("")}</div>`;
+              showingCn = true;
+              trBtn.textContent = "显示原文";
+            } catch (e) {
+              toastErr(`翻译失败: ${e.message}`);
+              trBtn.textContent = "翻译";
+            }
+            trBtn.disabled = false;
+          } else {
+            overlay.querySelector("#dt-title").textContent = origTitle;
+            const sub = overlay.querySelector("#dt-sub");
+            if (origSub) sub.textContent = origSub;
+            else if (sub) sub.remove();
+            overlay.querySelector("#orig-box").innerHTML = origBody;
+            showingCn = false;
+            trBtn.textContent = "翻译";
+          }
+        });
+      }
     } catch (e) {
       overlay.querySelector(".card").innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`;
     }

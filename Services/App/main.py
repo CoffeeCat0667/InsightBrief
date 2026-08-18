@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import SessionLocal
-from .routers import articles, audit_logs, auth, briefs, sources, tasks
+from .routers import articles, audit_logs, auth, briefs, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
 from .sync import ensure_schema, run_llm_sync, run_sources_sync
@@ -130,6 +130,7 @@ app.include_router(tasks.events_router)
 app.include_router(briefs.router)
 app.include_router(briefs.briefs_router)
 app.include_router(audit_logs.router)
+app.include_router(translate.router)
 
 # 前端静态资源 (Client/ 单页应用; 挂载在 API 路由之后, 不遮挡 /api 与 /docs)
 _client_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Client")

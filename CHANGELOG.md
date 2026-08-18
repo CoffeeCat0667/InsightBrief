@@ -26,6 +26,7 @@
   - 后端: `ingest.insert_articles_from_links/crawl_and_ingest` 新增 `on_progress(processed, total)` 回调(每篇处理含失败/跳过均触发), `task_manager._execute` 传回调发布 `run_progress` 事件(载荷含 source_id/index/total_sources/done/total)
   - 实时面板新增最新动作行(`.now-line`): "正在抓取 搜狐新闻: 12/25 篇 (第 2/27 源)" 随事件实时刷新
   - **移除「平台」选项卡**: 导航 7 视图 → 6 视图, `Client/js/views/platforms.js` 删除(后端 /api/platforms 保留)
+- **文章详情临时翻译按钮**(外文文章): 「查看原文」旁新增「翻译」— 点击调用新端点 `POST /api/translate`(登录即可, title+text 分开翻译, 结果不落库), 标题与正文区切换为中文译文, 按钮变「显示原文」可来回切换; **关闭重开同一篇文章始终显示原文**(翻译纯临时, PG 仍存原始外文); 失败判定: Translator 降级返回原文时以 `is_chinese` 判失败返回 502; 中文文章不显示按钮
 
 ### 其他
 
