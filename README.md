@@ -40,6 +40,10 @@ InsightBrief/
 │       ├── ingest.py           # 抓取落库中间层 (sha256 external_id, 幂等)
 │       ├── security.py         # bcrypt + JWT + 角色 (seed 幂等)
 │       └── sync.py             # 配置→DB 同步 (源/LLM 配置, 启动覆盖)
+├── Client/                     # 前端单页应用 (原生 JS, 静态挂载至 /)
+│   ├── index.html              # SPA 骨架 + 图标
+│   ├── css/style.css           # 双主题样式 (跟随系统 + 手动覆盖)
+│   └── js/                     # api 封装 / SSE 流解析 / hash 路由 / 7 视图
 ├── Report/                     # 简报系统
 │   ├── llm/                    # Provider 抽象 + OpenAI V1 客户端 + 错误两分
 │   ├── prompts.py              # 分类/摘要/标题/综述 prompt + extract_json
@@ -91,7 +95,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 
 统一响应 `{success, data, error}`,错误码:bad_request/unauthorized/forbidden/not_found/conflict/validation_error/rate_limited/internal_error/upstream_error。
 
-**前端说明**:无 Web 前端(用户拍板不做)。所有功能经 REST API 使用;操作类接口建议以 curl / `/docs` 触发,长任务用对应 SSE 端点订阅实时进度。
+**前端**:`Client/` 原生 HTML/CSS/JS 单页应用(零构建),由 FastAPI 静态挂载至 `/` — 启动服务后直接访问 `http://127.0.0.1:8000/` 即可使用(无需另起静态服务器)。功能:登录/注册、文章浏览与搜索、抓取任务(SSE 实时进度)、简报生成与阅读、新闻源管理(admin)、审计日志(admin)、平台浏览;双主题跟随系统(prefers-color-scheme),顶栏可手动覆盖。
 
 ## 配置与密钥
 

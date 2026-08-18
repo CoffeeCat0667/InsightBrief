@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .db import SessionLocal
 from .routers import articles, audit_logs, auth, briefs, sources, tasks
@@ -129,3 +130,8 @@ app.include_router(tasks.events_router)
 app.include_router(briefs.router)
 app.include_router(briefs.briefs_router)
 app.include_router(audit_logs.router)
+
+# 前端静态资源 (Client/ 单页应用; 挂载在 API 路由之后, 不遮挡 /api 与 /docs)
+_client_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Client")
+if os.path.isdir(_client_dir):
+    app.mount("/", StaticFiles(directory=_client_dir, html=True), name="static")

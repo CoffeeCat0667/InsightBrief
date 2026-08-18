@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **前端单页应用 `Client/`(原生 JS, 用户批准重启前端实现)**:
+  - 零构建零依赖(ES Modules + hash 路由),FastAPI 静态挂载至 `/`(main.py 一行, 注册于 API 路由之后, 不遮挡 `/api` 与 `/docs`);启动服务后直接访问 `http://127.0.0.1:8000/`
+  - 7 视图: 登录/注册、文章(搜索/分类筛选/详情抽屉: 摘要/全文翻译/内容片段)、抓取任务(源多选 + max_items + **SSE 实时进度**: 进度条/runs 徽章链/事件日志/取消)、简报(分类/源/时间窗 + **SSE 阶段进度** + 存档卡片阅读)、新闻源管理(admin CRUD + 启用开关 + config 三类模板)、审计日志(admin 筛选 + detail JSON 展开)、平台(26 卡片)
+  - **SSE 客户端自研**: fetch + ReadableStream 手写解析(原生 EventSource 无法携带 Authorization 头, 规避 token 进 URL/日志);兼容心跳 `: ping`、多行 data、终态关流
+  - 视觉: 双主题跟随系统 `prefers-color-scheme`(顶栏可手动覆盖 auto/light/dark)、CSS 变量主题、状态徽章语义色、卡片悬浮动效、skeleton 加载、toast、响应式(移动端侧栏抽屉)
+  - 验证: node --check 11 个 JS 文件 + 服务重启后静态/API/docs 冒烟 + 鉴权/权限(401/403)回归全绿;测试用户已清理
+  - 前端走查全链通过(playwright): 登录→7 导航、抓取 SSE 实时进度(100%/runs 徽章/历史刷新/幂等)、文章列表/详情抽屉/搜索、简报 SSE completed 4/4、源管理 CRUD(API 级)、审计筛选 + detail JSON、平台 26 卡片、主题三态切换、无 JS 控制台错误;测试数据已清理
+
+### 修复
+
+- **简报任务 failed: 文章脱离 Session 后懒加载 `contents` 崩溃**(`Parent instance <Article ...> is not bound to a Session`): `Report/processor.py::_load_articles` 查询补 `joinedload(Article.contents)` 预加载 + `.unique()` 去重 — session 关闭后 `_article_text` 访问全文片段不再抛 DetachedInstanceError; 摘要型源(article.content 为空)此前必触发, 现实测简报 completed 4/4
+- **前端登录 422 "请求参数校验失败"**: 登录/注册两 tab 同名 `username`/`password` 控件使 `form.username` 返回 RadioNodeList(无 `.value`)→ 请求体字段为空; auth.js 改按 tab 选择器取值, sources.js 同步规避 `form.name` 固有属性陷阱, api.js 过滤 undefined/null 表单值
+- **前端 SSE 字段错读**: crawl.js `run_finished` 原读不存在的 `stats.ok`, 改读 `stats.inserted/existed/failed`; crawl/brief 两视图终态事件后自动刷新历史/存档列表
+
 ### 其他
 
 - **决策 (2026-08-18)**: **LLM api_key 管理不做改造, 保持现状** — `Config/LLM.json` 明文 + 可选 `LLM_API_KEY` env 覆盖(启动同步生效); 本地单机可接受, 生产部署时再评估密钥方案(记录于 DECISIONS §15-9)
