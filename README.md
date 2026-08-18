@@ -100,7 +100,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 - `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、重试参数(attempts/wait_seconds)、playwright、generic 阈值 — **不含任何 timeout(超时已平台化)**
 - `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)**
 - `Config/Services.json`:27 源注册表 + platform/link 正则 + translator + domestic_source_ids
-- `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数;`LLM_API_KEY` 环境变量可覆盖 api_key(启动同步生效)
+- `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数;`LLM_API_KEY` 环境变量可覆盖 api_key(启动同步生效);**决策 2026-08-18: api_key 保持明文 + env 覆盖, 不做密钥管理改造, 本地单机可接受, 生产部署时再评估**(DECISIONS §15-9)
 - `Config/db.json`:PG/Redis DSN(`DB_DSN`/`REDIS_*` 覆盖);`.env.example` 为覆盖模板
 
 > 配置在进程启动时定型(lru_cache);启动时 Config 会同步覆盖 DB(sources 与 system_settings),运行中改 DB 无效。
