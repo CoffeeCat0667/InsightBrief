@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ...audit_logs import client_ip, write_audit
 from ..models import Article, Brief, BriefItem, BriefTask, Source, User
 from ..schemas import (
     ArticleCategory,
@@ -41,6 +42,7 @@ briefs_router = APIRouter(prefix="/api/briefs", tags=["briefs"])
 @router.post("")
 def create_brief_task(
     body: BriefTaskCreate,
+    request: Request,
     session: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
@@ -64,6 +66,14 @@ def create_brief_task(
     session.flush()
     session.commit()
     task = session.get(BriefTask, task.id)
+    write_audit(
+        user_id=user.id,
+        action="brief_task.create",
+        target_type="brief_task",
+        target_id=task.id,
+        detail=body.model_dump(exclude_none=True),
+        ip=client_ip(request),
+    )
     from Report import brief_processor
 
     manager.dispatch(task.id, brief_processor, kind="brief")
@@ -119,9 +129,10 @@ def get_brief_task(
 @router.post("/{task_id}/cancel")
 def cancel_brief_task(
     task_id: int,
+    request: Request,
     body: Optional[TaskCancelRequest] = None,
     session: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """请求取消简报任务 (阶段间生效)。"""
     task = session.get(BriefTask, task_id)
@@ -132,11 +143,19 @@ def cancel_brief_task(
         )
     if task.status not in _TERMINAL and manager.request_cancel(task_id, kind="brief"):
         session.refresh(task)
-        return ok(
-            TaskCancelRead(task_id=task_id, task_status=task.status, requested=True)
-        )
+        requested = True
+    else:
+        requested = False
+    write_audit(
+        user_id=user.id,
+        action="brief_task.cancel",
+        target_type="brief_task",
+        target_id=task_id,
+        detail={"requested": requested, "task_status": task.status},
+        ip=client_ip(request),
+    )
     return ok(
-        TaskCancelRead(task_id=task_id, task_status=task.status, requested=False)
+        TaskCancelRead(task_id=task_id, task_status=task.status, requested=requested)
     )
 
 

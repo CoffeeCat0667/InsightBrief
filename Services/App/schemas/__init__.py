@@ -19,6 +19,7 @@ from .article import (
     ArticleSearchParams,
     PlatformRead,
 )
+from .audit_log import AuditLogRead
 from .auth import (
     LoginRequest,
     RegisterRequest,
@@ -53,6 +54,7 @@ __all__ = [
     "ArticleListParams",
     "ArticleListItem",
     "ArticleSearchParams",
+    "AuditLogRead",
     "BriefItemRead",
     "BriefListParams",
     "BriefRead",

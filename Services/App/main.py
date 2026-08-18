@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .db import SessionLocal
-from .routers import articles, auth, briefs, sources, tasks
+from .routers import articles, audit_logs, auth, briefs, sources, tasks
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
 from .sync import ensure_schema, run_llm_sync, run_sources_sync
@@ -128,3 +128,4 @@ app.include_router(tasks.router)
 app.include_router(tasks.events_router)
 app.include_router(briefs.router)
 app.include_router(briefs.briefs_router)
+app.include_router(audit_logs.router)

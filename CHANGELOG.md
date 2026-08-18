@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **audit_logs 写入落地**(关键操作留痕):
+  - `Services/audit_logs/` 独立包: `write_audit`(独立会话提交 + detail 深拷贝; 任何异常只告警返回 False, **审计绝不炸主业务**) + `client_ip`(client.host 优先, X-Forwarded-For 首段兜底)
+  - 13 个调用点: `user.register`/`user.register_failed`/`user.login`/`user.login_failed`(含禁用 403)/`source.create`/`source.update`/`source.delete`/`source.disable`(软禁用)/`crawl_task.create`/`crawl_task.cancel`/`brief_task.create`/`brief_task.cancel`; action 命名 `{object}.{verb}`(失败加 `_failed`), detail 记录变更内容 + 客户端 IP
+  - `GET /api/audit-logs`(admin-only): action/user_id 筛选 + 分页, 按时间倒序; 无 token 401 / 非 admin 403
+  - 验证: import 冒烟 + e2e 20/20 全绿(含软禁用分支/401/403/筛选/12 种 action 全集/ip 采集)+ psql 核对 JSONB 落库 + write_audit 异常容错冒烟; 测试数据已清理
+
 ### 回滚
 
 - **前端已回滚** (revert eec51a9, 撤销 eec5241): 单页前端(登录/文章浏览/抓取触发+SSE/简报面板)整块撤销 — **用户拍板不做前端**;Web 后端功能继续经 REST API + `/docs` 使用。`Services/App/static/` 已删除, 版本字段回到 0.1.2。

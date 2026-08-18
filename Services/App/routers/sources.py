@@ -7,11 +7,12 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ...audit_logs import client_ip, write_audit
 from ..db import get_db
 from ..models import Source, User
 from ..schemas import ErrorCode, Page, PageParams, SourceCreate, SourceRead, SourceUpdate, ok
@@ -50,8 +51,9 @@ def list_sources(
 @router.post("")
 def create_source(
     body: SourceCreate,
+    request: Request,
     session: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    user: User = Depends(require_admin),
 ):
     """新增源 (admin); id 冲突返回 409。"""
     if session.get(Source, body.id) is not None:
@@ -62,6 +64,14 @@ def create_source(
     source = Source(**body.model_dump())
     session.add(source)
     session.commit()
+    write_audit(
+        user_id=user.id,
+        action="source.create",
+        target_type="source",
+        target_id=body.id,
+        detail=body.model_dump(),
+        ip=client_ip(request),
+    )
     return ok(SourceRead.model_validate(source))
 
 
@@ -84,8 +94,9 @@ def get_source(
 def update_source(
     source_id: str,
     body: SourceUpdate,
+    request: Request,
     session: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    user: User = Depends(require_admin),
 ):
     """更新源 (admin); 配置内源的改动会在下次启动 sync 被配置覆盖。"""
     source = session.get(Source, source_id)
@@ -94,17 +105,27 @@ def update_source(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": ErrorCode.NOT_FOUND, "message": f"源 {source_id} 不存在"},
         )
-    for key, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    for key, value in changes.items():
         setattr(source, key, value)
     session.commit()
+    write_audit(
+        user_id=user.id,
+        action="source.update",
+        target_type="source",
+        target_id=source_id,
+        detail=changes,
+        ip=client_ip(request),
+    )
     return ok(SourceRead.model_validate(source))
 
 
 @router.delete("/{source_id}")
 def delete_source(
     source_id: str,
+    request: Request,
     session: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    user: User = Depends(require_admin),
 ):
     """删除源 (admin); 被文章引用时 FK 阻止硬删 -> 自动转软禁用。"""
     source = session.get(Source, source_id)
@@ -116,10 +137,26 @@ def delete_source(
     try:
         session.delete(source)
         session.commit()
+        write_audit(
+            user_id=user.id,
+            action="source.delete",
+            target_type="source",
+            target_id=source_id,
+            detail={"name": source.name},
+            ip=client_ip(request),
+        )
         return ok({"deleted": source_id})
     except IntegrityError:
         session.rollback()
         source = session.get(Source, source_id)
         source.enabled = False
         session.commit()
+        write_audit(
+            user_id=user.id,
+            action="source.disable",
+            target_type="source",
+            target_id=source_id,
+            detail={"name": source.name, "reason": "被文章引用, 已软禁用"},
+            ip=client_ip(request),
+        )
         return ok({"deleted": None, "disabled": source_id, "reason": "被文章引用, 已软禁用"})

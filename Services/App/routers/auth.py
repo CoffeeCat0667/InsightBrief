@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ...audit_logs import client_ip, write_audit
 from ..db import get_db
 from ..models import Role, User
 from ..schemas import (
@@ -29,14 +30,26 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register")
-def register(req: RegisterRequest, session: Session = Depends(get_db)):
+def register(req: RegisterRequest, request: Request, session: Session = Depends(get_db)):
     """注册新用户 (普通角色); 用户名/邮箱冲突返回 409。"""
     if session.scalar(select(User).where(User.username == req.username)) is not None:
+        write_audit(
+            action="user.register_failed",
+            target_type="user",
+            detail={"username": req.username, "email": req.email, "reason": "用户名已存在"},
+            ip=client_ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": ErrorCode.CONFLICT, "message": "用户名已存在"},
         )
     if req.email and session.scalar(select(User).where(User.email == req.email)) is not None:
+        write_audit(
+            action="user.register_failed",
+            target_type="user",
+            detail={"username": req.username, "email": req.email, "reason": "邮箱已被注册"},
+            ip=client_ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": ErrorCode.CONFLICT, "message": "邮箱已被注册"},
@@ -51,24 +64,58 @@ def register(req: RegisterRequest, session: Session = Depends(get_db)):
     )
     session.add(user)
     session.commit()
+    write_audit(
+        user_id=user.id,
+        action="user.register",
+        target_type="user",
+        target_id=user.id,
+        detail={"username": req.username, "email": req.email},
+        ip=client_ip(request),
+    )
     return ok(UserRead.model_validate(user))
 
 
 @router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db)):
+def login(
+    request: Request,
+    form: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_db),
+):
     """OAuth2 表单登录 -> Bearer Token (OpenAPI 授权按钮可直接用)。"""
     user = session.scalar(select(User).where(User.username == form.username))
     if user is None or not verify_password(form.password, user.password_hash):
+        write_audit(
+            action="user.login_failed",
+            target_type="user",
+            detail={"username": form.username, "reason": "用户名或密码错误"},
+            ip=client_ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": ErrorCode.UNAUTHORIZED, "message": "用户名或密码错误"},
         )
     if not user.is_active:
+        write_audit(
+            user_id=user.id,
+            action="user.login_failed",
+            target_type="user",
+            target_id=user.id,
+            detail={"username": form.username, "reason": "账号已被禁用"},
+            ip=client_ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": ErrorCode.FORBIDDEN, "message": "账号已被禁用"},
         )
     token = create_access_token(user.id)
+    write_audit(
+        user_id=user.id,
+        action="user.login",
+        target_type="user",
+        target_id=user.id,
+        detail={"username": form.username},
+        ip=client_ip(request),
+    )
     return ok(
         TokenResponse(
             access_token=token,

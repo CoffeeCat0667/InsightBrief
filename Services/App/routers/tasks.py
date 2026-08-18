@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
+from ...audit_logs import client_ip, write_audit
 from ..models import CrawlTask, User
 from ..schemas import CrawlTaskCreate, CrawlTaskRead, Page, PageParams, TaskCancelRead, TaskCancelRequest, ok
 from ..schemas.task import TaskStatus
@@ -91,6 +92,7 @@ async def _event_stream(
 @router.post("")
 def create_crawl_task(
     body: CrawlTaskCreate,
+    request: Request,
     session: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
@@ -142,6 +144,14 @@ def create_crawl_task(
     session.flush()
     session.commit()
     task = session.get(CrawlTask, task.id)
+    write_audit(
+        user_id=user.id,
+        action="crawl_task.create",
+        target_type="crawl_task",
+        target_id=task.id,
+        detail={"source_ids": body.source_ids, "max_items": body.max_items},
+        ip=client_ip(request),
+    )
     manager.dispatch(task.id, kind="crawl")
     return ok(CrawlTaskRead.model_validate(task))
 
@@ -193,9 +203,10 @@ def get_crawl_task(
 @router.post("/{task_id}/cancel")
 def cancel_crawl_task(
     task_id: int,
+    request: Request,
     body: Optional[TaskCancelRequest] = None,
     session: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """请求取消任务: 已终态返回当前状态 (requested=False), 否则标记取消。"""
     task = session.get(CrawlTask, task_id)
@@ -206,11 +217,19 @@ def cancel_crawl_task(
         )
     if task.status not in _TERMINAL and manager.request_cancel(task_id, kind="crawl"):
         session.refresh(task)
-        return ok(
-            TaskCancelRead(task_id=task_id, task_status=task.status, requested=True)
-        )
+        requested = True
+    else:
+        requested = False
+    write_audit(
+        user_id=user.id,
+        action="crawl_task.cancel",
+        target_type="crawl_task",
+        target_id=task_id,
+        detail={"requested": requested, "task_status": task.status},
+        ip=client_ip(request),
+    )
     return ok(
-        TaskCancelRead(task_id=task_id, task_status=task.status, requested=False)
+        TaskCancelRead(task_id=task_id, task_status=task.status, requested=requested)
     )
 
 

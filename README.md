@@ -30,9 +30,10 @@ InsightBrief/
 ├── Services/
 │   ├── discovery.py            # 源注册表 + 链接发现 (DB 懒加载)
 │   ├── translator.py           # 中文判断 + deep-translator 翻译
+│   ├── audit_logs/             # 审计写入 (write_audit 独立会话, 失败不炸主业务)
 │   └── App/                    # Web 后端
 │       ├── main.py             # FastAPI 入口 (uvicorn Services.App.main:app)
-│       ├── routers/            # auth / sources / articles / tasks / briefs (+ SSE)
+│       ├── routers/            # auth / sources / articles / tasks / briefs / audit-logs (+ SSE)
 │       ├── models/             # 13 张表 SQLAlchemy 2.0 ORM
 │       ├── schemas/            # API 契约 (统一响应/分页/状态机)
 │       ├── task_manager.py     # 任务运行时 + Redis 事件总线 (crawl/brief kind 隔离)
@@ -86,6 +87,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 | GET | `/api/tasks/{id}/events` | 抓取任务 SSE 进度 (crawl) |
 | POST/GET | `/api/brief-tasks`、`GET /{id}`、`POST /{id}/cancel`、`GET /{id}/events` | 简报任务 + SSE (brief 独立端点) |
 | GET | `/api/briefs(/{id})` | 简报列表/详情 |
+| GET | `/api/audit-logs` | 审计日志 (admin; action/user_id 筛选 + 分页) |
 
 统一响应 `{success, data, error}`,错误码:bad_request/unauthorized/forbidden/not_found/conflict/validation_error/rate_limited/internal_error/upstream_error。
 
