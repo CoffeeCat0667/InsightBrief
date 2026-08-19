@@ -7,12 +7,21 @@
   "quarantine_consecutive": 3,
   "retry": {
     "attempts": 3,
-    "backoff_s": [1, 2, 4]
+    "backoff_s": [
+      1,
+      2,
+      4
+    ]
   },
   "operators": {
     "classify": {
       "max_batch": 20,
-      "categories": ["政治", "经济", "文化", "科技"]
+      "categories": [
+        "政治",
+        "经济",
+        "文化",
+        "科技"
+      ]
     },
     "summarize": {
       "max_tokens": 300
