@@ -58,11 +58,12 @@ export async function crawlView(root) {
           <small class="help">0 = 无限循环</small>
         </div>
         <div class="field" style="align-self:flex-end">
-          <label class="switch"><input type="checkbox" id="schedule-brief"><span class="track"></span><span>抓取结束后生成简报</span></label>
+          <label class="toggle-inline"><span class="switch"><input type="checkbox" id="schedule-brief"><span class="track"></span></span><span>抓取结束后生成简报</span></label>
         </div>
         <div class="field" style="align-self:flex-end">
           <button class="btn" id="create-schedule">创建并启用</button>
         </div>
+        <span id="schedule-empty" class="schedule-empty">暂无定时任务</span>
       </div>
       <div id="schedule-list"><div class="skeleton" style="height:50px"></div></div>
     </div>
@@ -92,12 +93,15 @@ export async function crawlView(root) {
 
   async function loadSchedules() {
     const list = root.querySelector("#schedule-list");
+    const empty = root.querySelector("#schedule-empty");
     try {
       const data = await api.get("/api/crawl-schedules", { page: 1, page_size: 100 });
       if (!data.items.length) {
-        list.innerHTML = `<div class="empty-hint">暂无定时任务</div>`;
+        empty.classList.remove("hidden");
+        list.innerHTML = "";
         return;
       }
+      empty.classList.add("hidden");
       list.innerHTML = data.items.map((s) => `
         <div class="schedule-row" data-schedule="${s.id}">
           <div><b>#${s.id}</b> ${s.enabled ? '<span class="badge ok">运行中</span>' : '<span class="badge mute">已暂停</span>'}</div>

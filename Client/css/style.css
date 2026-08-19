@@ -213,8 +213,8 @@ button { font-family: inherit; }
 
 .label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 .field { margin-bottom: 14px; }
-.field-row { display: flex; gap: 12px; }
-.field-row > .field { flex: 1; }
+.field-row { display: flex; gap: 12px; align-items: center; }
+.field-row > .field { flex: 1; margin-bottom: 0; }
 
 /* 徽章/标签 */
 .badge {
@@ -431,6 +431,8 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
 }
 .switch input:checked + .track { background: var(--ok-soft); border-color: var(--ok); }
 .switch input:checked + .track::after { left: 19px; background: var(--ok); }
+.toggle-inline { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; cursor: pointer; color: var(--text-2); font-size: 13.5px; line-height: 1; }
+.schedule-empty { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
 
 .brief-item-title { font-size: 15.5px; font-weight: 650; line-height: 1.5; }
 .brief-summary { color: var(--text-2); font-size: 13.5px; line-height: 1.7; margin-top: 8px; }
