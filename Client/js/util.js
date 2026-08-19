@@ -39,6 +39,7 @@ export const statusBadge = (st) => {
     running: ["info", "运行中"],
     completed: ["ok", "已完成"],
     failed: ["err", "失败"],
+    skipped: ["mute", "已跳过"],
     cancelled: ["warn", "已取消"],
   };
   const [cls, label] = map[st] || ["mute", st];

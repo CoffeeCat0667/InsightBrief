@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
 from ...audit_logs import client_ip, write_audit
-from ..models import CrawlTask, User
+from ..models import CrawlTask, Source, User
 from ..schemas import CrawlTaskCreate, CrawlTaskRead, Page, PageParams, TaskCancelRead, TaskCancelRequest, ok
 from ..schemas.task import TaskStatus
 from ..security import get_current_user, require_admin
@@ -110,6 +110,32 @@ def create_crawl_task(
                 "message": "source_ids 含空字符串",
             },
         )
+    selected_sources = session.scalars(
+        select(Source).where(Source.enabled.is_(True))
+        if not ids
+        else select(Source).where(Source.id.in_(ids), Source.enabled.is_(True))
+    ).all()
+    selected_by_id = {source.id: source for source in selected_sources}
+    requested_ids = list(selected_by_id) if not ids else ids
+    missing_ids = [source_id for source_id in requested_ids if source_id not in selected_by_id]
+    if missing_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "message": f"源不存在或未启用: {missing_ids}",
+            },
+        )
+    if body.domestic_max_ratio < 100 and requested_ids and all(
+        selected_by_id[source_id].is_domestic for source_id in requested_ids
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "message": "国内源占比限制小于 100% 时, 至少选择一个外源",
+            },
+        )
     duplicates = [
         t
         for t in session.scalars(
@@ -139,6 +165,7 @@ def create_crawl_task(
         status=TaskStatus.PENDING.value,
         source_ids=body.source_ids,
         max_items=body.max_items,
+        domestic_max_ratio=body.domestic_max_ratio,
     )
     session.add(task)
     session.flush()
@@ -155,6 +182,7 @@ def create_crawl_task(
             detail={
                 "source_ids": body.source_ids,
                 "max_items": body.max_items,
+                "domestic_max_ratio": body.domestic_max_ratio,
                 "dispatch_failed": True,
             },
             ip=client_ip(request),
@@ -168,7 +196,11 @@ def create_crawl_task(
         action="crawl_task.create",
         target_type="crawl_task",
         target_id=task.id,
-        detail={"source_ids": body.source_ids, "max_items": body.max_items},
+        detail={
+            "source_ids": body.source_ids,
+            "max_items": body.max_items,
+            "domestic_max_ratio": body.domestic_max_ratio,
+        },
         ip=client_ip(request),
     )
     return ok(CrawlTaskRead.model_validate(task))

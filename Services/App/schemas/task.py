@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskStatus(str, Enum):
@@ -22,11 +22,22 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class CrawlRunStatus(str, Enum):
+    """逐源运行状态; 配额耗尽时允许 skipped。"""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class CrawlTaskCreate(BaseModel):
     """POST /api/crawl-tasks 请求体; source_ids 省略 = 全部启用源。"""
 
     source_ids: Optional[List[str]] = None
     max_items: int = 30
+    domestic_max_ratio: int = Field(default=100, ge=0, le=100)
 
 
 class CrawlRunRead(BaseModel):
@@ -36,7 +47,7 @@ class CrawlRunRead(BaseModel):
 
     id: int
     source_id: str
-    status: TaskStatus
+    status: CrawlRunStatus
     discovered_links: int = 0
     success_count: int = 0
     failed_count: int = 0
@@ -58,6 +69,7 @@ class CrawlTaskRead(BaseModel):
     message: Optional[str] = None
     source_ids: Optional[List[str]] = None
     max_items: int = 30
+    domestic_max_ratio: int = 100
     error: Optional[Dict[str, Any]] = None
     stats: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None

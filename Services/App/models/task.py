@@ -33,6 +33,9 @@ class CrawlTask(TimestampMixin, Base):
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_ids: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     max_items: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    domestic_max_ratio: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)

@@ -1,4 +1,4 @@
-// 抓取任务: 创建(源多选/max_items) + SSE 实时进度 + 任务历史/详情/取消
+// 抓取任务: 创建(源多选/max_items/国内占比) + SSE 实时进度 + 任务历史/详情/取消
 import { api, toastErr, toastOk, toastWarn } from "../api.js";
 import { streamEvents } from "../sse.js";
 import { esc, fmtDateTime, statusBadge, pager } from "../util.js";
@@ -34,6 +34,11 @@ export async function crawlView(root) {
           <label class="label">每个源数量上限</label>
           <input class="input" id="max-items" type="number" min="1" max="500" value="30">
         </div>
+        <div class="field" style="max-width:240px">
+          <label class="label">国内源新闻数最大占比 (%)</label>
+          <input class="input" id="domestic-max-ratio" type="number" min="0" max="100" step="1" value="100">
+          <small class="help">按成功新闻数计算，100 = 不限制</small>
+        </div>
         <div class="field" style="align-self:flex-end">
           <button class="btn lg" id="start-crawl">开始抓取</button>
         </div>
@@ -66,7 +71,17 @@ export async function crawlView(root) {
   // ---- SSE 实时进度 ----
   let ac = null;
   async function startCrawl() {
-    const body = { max_items: Number(root.querySelector("#max-items").value) || 30 };
+    const maxItems = Number(root.querySelector("#max-items").value);
+    const domesticMaxRatio = Number(root.querySelector("#domestic-max-ratio").value);
+    if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 500) {
+      toastWarn("每个源数量上限必须是 1-500 的整数");
+      return;
+    }
+    if (!Number.isInteger(domesticMaxRatio) || domesticMaxRatio < 0 || domesticMaxRatio > 100) {
+      toastWarn("国内源新闻数最大占比必须是 0-100 的整数");
+      return;
+    }
+    const body = { max_items: maxItems, domestic_max_ratio: domesticMaxRatio };
     if (selected.size) body.source_ids = [...selected];
     if (ac) { ac.abort(); ac = null; }
     try {
@@ -91,6 +106,7 @@ export async function crawlView(root) {
         <button class="btn ghost danger sm" id="live-cancel">取消任务</button>
       </div>
       <div class="now-line" id="lp-now"></div>
+      <div class="quota-line" id="lp-quota">国内源占比限制：${task.domestic_max_ratio ?? 100}%</div>
       <div class="progress-row">
         <span class="stage-label">当前源文章进度</span>
         <div class="progress-track"><div class="progress-fill" id="lp-fill" style="width:0%"></div></div>
@@ -110,6 +126,7 @@ export async function crawlView(root) {
     const fillSrc = panel.querySelector("#lp-fill-src");
     const percentSrc = panel.querySelector("#lp-percent-src");
     const nowLine = panel.querySelector("#lp-now");
+    const quotaLine = panel.querySelector("#lp-quota");
     const strip = panel.querySelector("#lp-runs");
     const log = panel.querySelector("#lp-log");
     const setNow = (html) => { nowLine.innerHTML = html; };
@@ -122,8 +139,9 @@ export async function crawlView(root) {
     };
     const renderRuns = (list = runs) => {
       strip.innerHTML = list.map((r) => {
-        const cls = r.status === "completed" ? "ok" : r.status === "failed" ? "err" : r.status === "running" ? "running" : "";
-        return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${r.success_count || 0}/${(r.success_count || 0) + (r.failed_count || 0)}</span>`;
+        const cls = r.status === "completed" ? "ok" : r.status === "failed" ? "err" : r.status === "running" ? "running" : r.status === "skipped" ? "skipped" : "";
+        const label = r.status === "skipped" ? "已跳过" : `${r.success_count || 0}/${(r.success_count || 0) + (r.failed_count || 0)}`;
+        return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${label}</span>`;
       }).join("") || `<span class="empty-hint" style="padding:8px 0">等待源任务开始...</span>`;
     };
     let runs = [];
@@ -157,15 +175,21 @@ export async function crawlView(root) {
           return;
         }
         if (event === "run_finished") {
+          const skipped = data.status === "skipped";
           const ok = data.status === "completed";
           const ins = data.stats?.inserted || 0;
           const ex = data.stats?.existed || 0;
           const fail = data.stats?.failed || 0;
-          upsertRun(data.source_id, { status: ok ? "completed" : "failed", success_count: ins, failed_count: fail });
+          upsertRun(data.source_id, { status: skipped ? "skipped" : ok ? "completed" : "failed", success_count: ins, failed_count: fail });
+          if (data.quota) {
+            const q = data.quota;
+            quotaLine.textContent = `国内源占比：${q.domestic_count || 0}/${(q.domestic_count || 0) + (q.foreign_count || 0)} = ${q.actual_domestic_ratio || 0}% · 上限 ${task.domestic_max_ratio ?? 100}%`;
+          }
           fill.style.width = "100%";
-          percent.textContent = "完成";
-          setNow(`<b>${esc(srcName(data.source_id))}</b> ${ok ? `完成, 新增 ${ins} 篇` : "失败"}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
-          logLine(ok ? "ok" : "err", `<b>${esc(srcName(data.source_id))}</b> ${ok ? `完成, 新增 ${ins} 篇` : "失败"}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
+          percent.textContent = skipped ? "跳过" : "完成";
+          const message = skipped ? "跳过（国内源配额已用尽）" : ok ? `完成, 新增 ${ins} 篇` : "失败";
+          setNow(`<b>${esc(srcName(data.source_id))}</b> ${message}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
+          logLine(skipped ? "" : ok ? "ok" : "err", `<b>${esc(srcName(data.source_id))}</b> ${message}${ex ? ` (${ex} 已存在)` : ""}${fail ? `, ${fail} 失败` : ""}`);
           return;
         }
         if (event === "task_update" || event.startsWith("task_")) {
@@ -176,6 +200,10 @@ export async function crawlView(root) {
             fillSrc.className = `progress-fill ${data.status === "completed" ? "ok" : data.status === "failed" ? "err" : data.status === "cancelled" ? "warn" : ""}`;
           }
           if (data?.runs) { runs = data.runs; renderRuns(); }
+          if (data?.stats?.quota) {
+            const q = data.stats.quota;
+            quotaLine.textContent = `国内源占比：${q.domestic_count || 0}/${(q.domestic_count || 0) + (q.foreign_count || 0)} = ${q.actual_domestic_ratio || 0}% · 上限 ${task.domestic_max_ratio ?? 100}%`;
+          }
           if (data?.stage) {
             const m = data.stage.match(/\((\d+)\/(\d+)\)$/);
             if (m) {
@@ -241,7 +269,7 @@ export async function crawlView(root) {
             ${statusBadge(t.status)}
             <span style="color:var(--text-3);font-size:12.5px">${fmtDateTime(t.created_at)}</span>
             <span style="color:var(--text-3);font-size:12.5px">进度 ${t.progress}%</span>
-            <span style="color:var(--text-3);font-size:12.5px">${(t.source_ids || []).length ? `源 ${t.source_ids.length} 个` : "全部源"} · 上限 ${t.max_items}</span>
+            <span style="color:var(--text-3);font-size:12.5px">${(t.source_ids || []).length ? `源 ${t.source_ids.length} 个` : "全部源"} · 上限 ${t.max_items} · 国内 ≤ ${t.domestic_max_ratio ?? 100}%</span>
             <span style="flex:1"></span>
             ${t.status === "running" || t.status === "pending" ? `<button class="btn ghost danger sm" data-cancel="${t.id}">取消</button>` : ""}
             <button class="btn ghost sm" data-toggle="${t.id}">详情</button>

@@ -19,9 +19,10 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 import redis
+from sqlalchemy import select
 
 from .db import SessionLocal
-from .models import CrawlRun, CrawlTask
+from .models import CrawlRun, CrawlTask, Source
 from .schemas import TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -343,6 +344,39 @@ class TaskManager:
             with self._lock:
                 self._handles.pop(key, None)
 
+    @staticmethod
+    def _domestic_limit(foreign_count: int, ratio: int) -> Optional[int]:
+        """按最终成功新闻数计算国内新闻硬上限。"""
+        if ratio >= 100:
+            return None
+        if ratio <= 0 or foreign_count <= 0:
+            return 0
+        return (foreign_count * ratio) // (100 - ratio)
+
+    @staticmethod
+    def _success_count(stats: Dict[str, int]) -> int:
+        return int(stats.get("inserted", 0)) + int(stats.get("existed", 0))
+
+    @classmethod
+    def _quota_stats(
+        cls,
+        *,
+        domestic_max_ratio: int,
+        domestic_count: int,
+        foreign_count: int,
+    ) -> Dict[str, Any]:
+        domestic_limit = cls._domestic_limit(foreign_count, domestic_max_ratio)
+        total_count = domestic_count + foreign_count
+        return {
+            "domestic_max_ratio": domestic_max_ratio,
+            "domestic_limit": domestic_limit,
+            "domestic_count": domestic_count,
+            "foreign_count": foreign_count,
+            "actual_domestic_ratio": (
+                round(domestic_count / total_count * 100, 2) if total_count else 0.0
+            ),
+        }
+
     def _execute(self, task_id: int, kind: str = KIND_CRAWL) -> None:
         with SessionLocal() as session:
             task = session.get(CrawlTask, task_id)
@@ -355,30 +389,98 @@ class TaskManager:
             session.commit()
             source_ids = list(task.source_ids) if task.source_ids else None
             max_items = task.max_items or 30
-        self._emit(task_id, "task_update", self._snapshot(task_id), kind=kind)
+            domestic_max_ratio = int(task.domestic_max_ratio)
+        self._emit(task_id, "task_update", self._snapshot(task_id, kind=kind), kind=kind)
 
-        if source_ids is None:
-            from sqlalchemy import select
-
-            from .models import Source
-
-            with SessionLocal() as session:
-                source_ids = session.scalars(
-                    select(Source.id).where(Source.enabled.is_(True))
+        with SessionLocal() as session:
+            if source_ids is None:
+                source_rows = session.scalars(
+                    select(Source).where(Source.enabled.is_(True))
                 ).all()
-        total = len(source_ids)
+                ordered_sources = list(source_rows)
+            else:
+                source_rows = session.scalars(
+                    select(Source).where(Source.id.in_(source_ids), Source.enabled.is_(True))
+                ).all()
+                source_by_id = {source.id: source for source in source_rows}
+                ordered_sources = [source_by_id[sid] for sid in source_ids if sid in source_by_id]
+        foreign_sources = [source for source in ordered_sources if not source.is_domestic]
+        domestic_sources = [source for source in ordered_sources if source.is_domestic]
+        execution_sources = foreign_sources + domestic_sources
+        total = len(execution_sources)
+        if domestic_max_ratio < 100 and not foreign_sources:
+            self._finalize(
+                task_id,
+                TaskStatus.FAILED.value,
+                error={"message": "未找到可执行的外源, 无法满足国内源占比限制"},
+                kind=kind,
+            )
+            return
         done = 0
+        foreign_count = 0
+        domestic_count = 0
+        domestic_limit = None
         aggregate = {
-            "sources": {"total": total, "ok": 0, "failed": 0},
+            "sources": {"total": total, "ok": 0, "failed": 0, "skipped": 0},
             "articles": {"discovered": 0, "inserted": 0, "existed": 0, "failed": 0},
+            "quota": self._quota_stats(
+                domestic_max_ratio=domestic_max_ratio,
+                domestic_count=0,
+                foreign_count=0,
+            ),
         }
-        for idx, sid in enumerate(source_ids):
+        for idx, source in enumerate(execution_sources):
             if self._cancel_requested(task_id, kind):
                 break
-            self._mark_run(task_id, sid, running=True)
-            self._emit(task_id, "run_started", {"source_id": sid, "index": idx, "total_sources": total}, kind=kind)
+            is_domestic = bool(source.is_domestic)
+            if is_domestic:
+                domestic_limit = self._domestic_limit(foreign_count, domestic_max_ratio)
+                aggregate["quota"] = self._quota_stats(
+                    domestic_max_ratio=domestic_max_ratio,
+                    domestic_count=domestic_count,
+                    foreign_count=foreign_count,
+                )
+                if domestic_limit is not None and domestic_count >= domestic_limit:
+                    self._mark_run(
+                        task_id,
+                        source.id,
+                        running=False,
+                        status="skipped",
+                        error={"message": "国内源配额已用尽"},
+                    )
+                    aggregate["sources"]["skipped"] += 1
+                    done += 1
+                    self._emit(
+                        task_id,
+                        "run_finished",
+                        {
+                            "source_id": source.id,
+                            "status": "skipped",
+                            "is_domestic": True,
+                            "reason": "domestic_quota_exhausted",
+                            "quota": aggregate["quota"],
+                        },
+                        kind=kind,
+                    )
+                    self._update_progress(
+                        task_id, done, total, aggregate, source.id, kind
+                    )
+                    continue
+            self._mark_run(task_id, source.id, running=True)
+            self._emit(
+                task_id,
+                "run_started",
+                {
+                    "source_id": source.id,
+                    "index": idx,
+                    "total_sources": total,
+                    "is_domestic": is_domestic,
+                    "domestic_max_ratio": domestic_max_ratio,
+                },
+                kind=kind,
+            )
 
-            def on_run_progress(done: int, item_total: int, _sid=sid, _idx=idx):
+            def on_run_progress(done: int, item_total: int, _sid=source.id, _idx=idx):
                 self._emit(
                     task_id,
                     "run_progress",
@@ -388,6 +490,7 @@ class TaskManager:
                         "total_sources": total,
                         "done": done,
                         "total": item_total,
+                        "is_domestic": is_domestic,
                     },
                     kind=kind,
                 )
@@ -395,32 +498,80 @@ class TaskManager:
             try:
                 from .ingest import crawl_and_ingest
 
-                stats = crawl_and_ingest(sid, max_items=max_items, on_progress=on_run_progress)
+                remaining = max_items
+                if is_domestic and domestic_limit is not None:
+                    remaining = min(max_items, max(0, domestic_limit - domestic_count))
+                stats = crawl_and_ingest(
+                    source.id, max_items=remaining, on_progress=on_run_progress
+                )
                 run_status = TaskStatus.COMPLETED.value
                 aggregate["sources"]["ok"] += 1
             except Exception as exc:
-                logger.warning("[task %s] 源 %s 抓取失败: %s", task_id, sid, exc)
+                logger.warning("[task %s] 源 %s 抓取失败: %s", task_id, source.id, exc)
                 stats = {"discovered": 0, "inserted": 0, "existed": 0, "failed": 0}
                 run_status = TaskStatus.FAILED.value
                 aggregate["sources"]["failed"] += 1
+            success = self._success_count(stats)
+            if is_domestic:
+                domestic_count += success
+            else:
+                foreign_count += success
             for key in ("discovered", "inserted", "existed", "failed"):
                 aggregate["articles"][key] += stats.get(key, 0)
-            self._mark_run(task_id, sid, running=False, status=run_status, stats=stats)
-            self._emit(task_id, "run_finished", {"source_id": sid, "status": run_status, "stats": stats}, kind=kind)
+            aggregate["quota"] = self._quota_stats(
+                domestic_max_ratio=domestic_max_ratio,
+                domestic_count=domestic_count,
+                foreign_count=foreign_count,
+            )
+            self._mark_run(
+                task_id,
+                source.id,
+                running=False,
+                status=run_status,
+                stats=stats,
+            )
+            self._emit(
+                task_id,
+                "run_finished",
+                {
+                    "source_id": source.id,
+                    "status": run_status,
+                    "stats": stats,
+                    "is_domestic": is_domestic,
+                    "quota": aggregate["quota"],
+                },
+                kind=kind,
+            )
             done += 1
-            with SessionLocal() as session:
-                task = session.get(CrawlTask, task_id)
-                if task is None:
-                    return
-                task.progress = int(done / total * 100) if total else 100
-                task.stage = f"正在抓取 {sid} ({done}/{total})"
-                task.stats = aggregate
-                session.commit()
-            self._emit(task_id, "task_update", self._snapshot(task_id), kind=kind)
+            self._update_progress(task_id, done, total, aggregate, source.id, kind)
 
         cancelled = self._cancel_requested(task_id, kind)
         final = TaskStatus.CANCELLED.value if cancelled else TaskStatus.COMPLETED.value
         self._finalize(task_id, final, stats=aggregate, kind=kind)
+
+    def _update_progress(
+        self,
+        task_id: int,
+        done: int,
+        total: int,
+        aggregate: Dict[str, Any],
+        source_id: str,
+        kind: str,
+    ) -> None:
+        model = CrawlTask if kind == KIND_CRAWL else None
+        if model is None:
+            from .models import BriefTask
+
+            model = BriefTask
+        with SessionLocal() as session:
+            task = session.get(model, task_id)
+            if task is None:
+                return
+            task.progress = int(done / total * 100) if total else 100
+            task.stage = f"正在抓取 {source_id} ({done}/{total})"
+            task.stats = aggregate
+            session.commit()
+        self._emit(task_id, "task_update", self._snapshot(task_id, kind=kind), kind=kind)
 
     def _finalize(
         self,
@@ -436,8 +587,13 @@ class TaskManager:
             handle = self._handles.get(key)
             if handle is not None:
                 handle["status"] = status
+        model = CrawlTask if kind == KIND_CRAWL else None
+        if model is None:
+            from .models import BriefTask
+
+            model = BriefTask
         with SessionLocal() as session:
-            task = session.get(CrawlTask, task_id)
+            task = session.get(model, task_id)
             if task is None:
                 return
             task.status = status
@@ -449,7 +605,7 @@ class TaskManager:
                 task.error = error
                 task.message = error.get("message", "任务失败")
             session.commit()
-        self._emit(task_id, f"task_{status}", self._snapshot(task_id), kind=kind)
+        self._emit(task_id, f"task_{status}", self._snapshot(task_id, kind=kind), kind=kind)
 
     def _mark_run(
         self,
@@ -459,6 +615,7 @@ class TaskManager:
         running: bool,
         status: str = "",
         stats: Optional[Dict[str, int]] = None,
+        error: Optional[Dict[str, Any]] = None,
     ) -> None:
         with SessionLocal() as session:
             if running:
@@ -476,38 +633,47 @@ class TaskManager:
                 .first()
             )
             if run is None:
-                return
+                run = CrawlRun(task_id=task_id, source_id=source_id, status=status)
+                session.add(run)
             run.status = status
             run.discovered_links = (stats or {}).get("discovered", 0)
             run.success_count = (stats or {}).get("inserted", 0)
             run.failed_count = (stats or {}).get("failed", 0)
+            run.error = error
             run.finished_at = datetime.now(timezone.utc)
             session.commit()
 
     # ---------------------------------------------------------- 快照/事件
-    def _snapshot(self, task_id: int) -> Dict[str, Any]:
+    def _snapshot(self, task_id: int, kind: str = KIND_CRAWL) -> Dict[str, Any]:
         """任务实时快照 (读 DB 行 + 最近 run 摘要), 作为事件/SSE 负载。"""
+        model = CrawlTask if kind == KIND_CRAWL else None
+        if model is None:
+            from .models import BriefTask
+
+            model = BriefTask
         with SessionLocal() as session:
-            task = session.get(CrawlTask, task_id)
+            task = session.get(model, task_id)
             if task is None:
                 return {"task_id": task_id, "status": "unknown"}
-            runs = [
-                {
-                    "source_id": r.source_id,
-                    "status": r.status,
-                    "discovered_links": r.discovered_links,
-                    "success_count": r.success_count,
-                    "failed_count": r.failed_count,
-                    "error": r.error,
-                }
-                for r in (
-                    session.query(CrawlRun)
-                    .filter(CrawlRun.task_id == task_id)
-                    .order_by(CrawlRun.id.asc())
-                    .all()
-                )
-            ]
-            return {
+            runs = []
+            if kind == KIND_CRAWL:
+                runs = [
+                    {
+                        "source_id": r.source_id,
+                        "status": r.status,
+                        "discovered_links": r.discovered_links,
+                        "success_count": r.success_count,
+                        "failed_count": r.failed_count,
+                        "error": r.error,
+                    }
+                    for r in (
+                        session.query(CrawlRun)
+                        .filter(CrawlRun.task_id == task_id)
+                        .order_by(CrawlRun.id.asc())
+                        .all()
+                    )
+                ]
+            snapshot = {
                 "task_id": task.id,
                 "status": task.status,
                 "progress": task.progress,
@@ -515,13 +681,21 @@ class TaskManager:
                 "message": task.message,
                 "stats": task.stats,
                 "error": task.error,
-                "source_ids": task.source_ids,
-                "max_items": task.max_items,
+                "params": getattr(task, "params", None),
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "started_at": task.started_at.isoformat() if task.started_at else None,
                 "finished_at": task.finished_at.isoformat() if task.finished_at else None,
                 "runs": runs,
             }
+            if kind == KIND_CRAWL:
+                snapshot.update(
+                    {
+                        "source_ids": task.source_ids,
+                        "max_items": task.max_items,
+                        "domestic_max_ratio": task.domestic_max_ratio,
+                    }
+                )
+            return snapshot
 
     def _emit(
         self, task_id: int, event: str, data: Dict[str, Any], kind: str = KIND_CRAWL

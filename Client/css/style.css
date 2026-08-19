@@ -209,6 +209,7 @@ button { font-family: inherit; }
 }
 .textarea { font-family: var(--mono); font-size: 12.5px; min-height: 90px; resize: vertical; }
 .input.invalid { border-color: var(--err); }
+.help { display: block; margin-top: 5px; color: var(--text-3); font-size: 12px; }
 
 .label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 .field { margin-bottom: 14px; }
@@ -396,6 +397,7 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
 .run-dot.running .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; }
 .run-dot.ok { color: var(--ok); }
 .run-dot.err { color: var(--err); }
+.run-dot.skipped { color: var(--text-3); }
 
 .event-log {
   background: var(--code-bg);

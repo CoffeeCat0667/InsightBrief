@@ -1,7 +1,11 @@
-"""audit action index and remove authentication PII from details
+"""audit action index
 
 Revision ID: f7a8b9c0d1e2
 Revises: e5f6a7b8c9d0
+
+The authentication audit PII cleanup is intentionally not part of the
+automatic migration chain; it requires a separate, explicit data-retention
+approval.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -18,21 +22,6 @@ def upgrade() -> None:
         sa.text(
             "CREATE INDEX IF NOT EXISTS ix_audit_logs_action "
             "ON audit_logs (action)"
-        )
-    )
-    # Authentication audit details historically contained username/email. Keep
-    # the event and reason, but remove those PII keys in place.
-    op.execute(
-        sa.text(
-            """
-            UPDATE audit_logs
-            SET detail = detail - 'username' - 'email'
-            WHERE action IN (
-                'user.register', 'user.register_failed',
-                'user.login', 'user.login_failed'
-            )
-              AND detail IS NOT NULL
-            """
         )
     )
 
