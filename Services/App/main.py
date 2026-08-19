@@ -18,11 +18,13 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import SessionLocal
-from .routers import articles, audit_logs, auth, briefs, sources, tasks, translate
+from .routers import articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
 from .sync import ensure_schema, run_llm_sync, run_sources_sync
 from .task_manager import manager
+from .schedule_manager import schedule_manager
+from .auto_brief import auto_brief_manager
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,10 @@ async def lifespan(app: FastAPI):
     manager.recover_stale_tasks()
     manager.recover_stale_brief_tasks()
     manager.set_loop(asyncio.get_running_loop())
+    auto_brief_manager.recover()
+    schedule_manager.start()
     yield
+    schedule_manager.shutdown()
     manager.shutdown()
 
 
@@ -127,6 +132,7 @@ app.include_router(articles.router)
 app.include_router(articles.platforms_router)
 app.include_router(tasks.router)
 app.include_router(tasks.events_router)
+app.include_router(schedules.router)
 app.include_router(briefs.router)
 app.include_router(briefs.briefs_router)
 app.include_router(audit_logs.router)

@@ -38,6 +38,7 @@ class CrawlTaskCreate(BaseModel):
     source_ids: Optional[List[str]] = None
     max_items: int = 30
     domestic_max_ratio: int = Field(default=100, ge=0, le=100)
+    generate_brief: bool = False
 
 
 class CrawlRunRead(BaseModel):
@@ -70,6 +71,8 @@ class CrawlTaskRead(BaseModel):
     source_ids: Optional[List[str]] = None
     max_items: int = 30
     domestic_max_ratio: int = 100
+    schedule_id: Optional[int] = None
+    generate_brief: bool = False
     error: Optional[Dict[str, Any]] = None
     stats: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None

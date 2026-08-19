@@ -502,7 +502,10 @@ class TaskManager:
                 if is_domestic and domestic_limit is not None:
                     remaining = min(max_items, max(0, domestic_limit - domestic_count))
                 stats = crawl_and_ingest(
-                    source.id, max_items=remaining, on_progress=on_run_progress
+                    source.id,
+                    max_items=remaining,
+                    on_progress=on_run_progress,
+                    crawl_task_id=task_id,
                 )
                 run_status = TaskStatus.COMPLETED.value
                 aggregate["sources"]["ok"] += 1
@@ -606,6 +609,17 @@ class TaskManager:
                 task.message = error.get("message", "任务失败")
             session.commit()
         self._emit(task_id, f"task_{status}", self._snapshot(task_id, kind=kind), kind=kind)
+        if kind == KIND_CRAWL:
+            self._after_crawl_terminal(task_id, status)
+
+    def _after_crawl_terminal(self, task_id: int, status: str) -> None:
+        """抓取完成后按快照配置触发一次精确范围的自动简报。"""
+        try:
+            from .auto_brief import auto_brief_manager
+
+            auto_brief_manager.create_for_crawl(task_id)
+        except Exception:
+            logger.exception("[task %s] 自动简报触发失败", task_id)
 
     def _mark_run(
         self,

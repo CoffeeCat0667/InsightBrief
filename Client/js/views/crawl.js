@@ -45,6 +45,28 @@ export async function crawlView(root) {
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-top:0">定时任务</div>
+      <div class="field-row">
+        <div class="field" style="max-width:180px">
+          <label class="label">每隔多少小时</label>
+          <input class="input" id="schedule-interval" type="number" min="1" max="720" value="6">
+        </div>
+        <div class="field" style="max-width:180px">
+          <label class="label">最多执行次数</label>
+          <input class="input" id="schedule-max-runs" type="number" min="0" max="100000" value="0">
+          <small class="help">0 = 无限循环</small>
+        </div>
+        <div class="field" style="align-self:flex-end">
+          <label class="switch"><input type="checkbox" id="schedule-brief"><span class="track"></span><span>抓取结束后生成简报</span></label>
+        </div>
+        <div class="field" style="align-self:flex-end">
+          <button class="btn" id="create-schedule">创建并启用</button>
+        </div>
+      </div>
+      <div id="schedule-list"><div class="skeleton" style="height:50px"></div></div>
+    </div>
+
     <div id="live-panel" class="card hidden" style="margin-bottom:16px"></div>
 
     <div class="card">
@@ -67,6 +89,66 @@ export async function crawlView(root) {
     if (c.classList.contains("active")) selected.add(c.dataset.id);
     else selected.delete(c.dataset.id);
   }));
+
+  async function loadSchedules() {
+    const list = root.querySelector("#schedule-list");
+    try {
+      const data = await api.get("/api/crawl-schedules", { page: 1, page_size: 100 });
+      if (!data.items.length) {
+        list.innerHTML = `<div class="empty-hint">暂无定时任务</div>`;
+        return;
+      }
+      list.innerHTML = data.items.map((s) => `
+        <div class="schedule-row" data-schedule="${s.id}">
+          <div><b>#${s.id}</b> ${s.enabled ? '<span class="badge ok">运行中</span>' : '<span class="badge mute">已暂停</span>'}</div>
+          <div class="schedule-meta">每 ${s.interval_hours} 小时 · ${s.max_runs ? `${s.run_count}/${s.max_runs} 次` : `${s.run_count} 次/无限`} · 国内 ≤ ${s.domestic_max_ratio}% · 简报 ${s.generate_brief ? "开" : "关"}</div>
+          <div class="schedule-meta">下次：${fmtDateTime(s.next_run_at)}${s.last_error ? ` · ${esc(s.last_error)}` : ""}</div>
+          <div class="schedule-actions">
+            <button class="btn ghost sm" data-run-now="${s.id}">立即执行</button>
+            <button class="btn ghost sm" data-toggle-schedule="${s.id}">${s.enabled ? "暂停" : "启用"}</button>
+            <button class="btn ghost danger sm" data-delete-schedule="${s.id}">删除</button>
+          </div>
+        </div>`).join("");
+      list.querySelectorAll("[data-run-now]").forEach((b) => b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try { const result = await api.post(`/api/crawl-schedules/${b.dataset.runNow}/run-now`); toastOk(`已创建抓取任务 #${result.crawl_task_id}`); renderHistory(1); }
+        catch (err) { toastErr(err.message); }
+      }));
+      list.querySelectorAll("[data-toggle-schedule]").forEach((b) => b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = b.dataset.toggleSchedule;
+        const row = b.closest(".schedule-row");
+        const enabled = row.querySelector(".badge.ok") !== null;
+        try { await api.post(`/api/crawl-schedules/${id}/${enabled ? "disable" : "enable"}`); loadSchedules(); }
+        catch (err) { toastErr(err.message); }
+      }));
+      list.querySelectorAll("[data-delete-schedule]").forEach((b) => b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!window.confirm("确定删除此定时任务？历史抓取和简报不会删除。")) return;
+        try { await api.delete(`/api/crawl-schedules/${b.dataset.deleteSchedule}`); loadSchedules(); }
+        catch (err) { toastErr(err.message); }
+      }));
+    } catch (e) { toastErr(e.message); }
+  }
+
+  async function createSchedule() {
+    const interval = Number(root.querySelector("#schedule-interval").value);
+    const maxRuns = Number(root.querySelector("#schedule-max-runs").value);
+    if (!Number.isInteger(interval) || interval < 1 || interval > 720) return toastWarn("执行间隔必须是 1-720 小时的整数");
+    if (!Number.isInteger(maxRuns) || maxRuns < 0 || maxRuns > 100000) return toastWarn("最多执行次数必须是 0-100000 的整数");
+    const body = {
+      interval_hours: interval,
+      max_runs: maxRuns,
+      max_items: Number(root.querySelector("#max-items").value) || 30,
+      domestic_max_ratio: Number(root.querySelector("#domestic-max-ratio").value),
+      generate_brief: root.querySelector("#schedule-brief").checked,
+    };
+    if (selected.size) body.source_ids = [...selected];
+    try { await api.post("/api/crawl-schedules", body); toastOk("定时任务已创建，将立即执行首次抓取"); loadSchedules(); }
+    catch (e) { toastErr(e.message); }
+  }
+  root.querySelector("#create-schedule").addEventListener("click", createSchedule);
+  loadSchedules();
 
   // ---- SSE 实时进度 ----
   let ac = null;

@@ -28,6 +28,7 @@ class BriefTaskRead(BaseModel):
 
     id: int
     user_id: int
+    origin_crawl_task_id: Optional[int] = None
     status: TaskStatus
     progress: int
     stage: Optional[str] = None

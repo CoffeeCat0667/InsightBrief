@@ -22,7 +22,7 @@ from Core.base import BaseNewsCrawler
 from Core.models import ContentItem, NewsItem, NewsMetaInfo
 from Config.config import core_config
 from .db import SessionLocal
-from .models import Article, ArticleContent, ArticleMedia
+from .models import Article, ArticleContent, ArticleMedia, CrawlTaskArticle
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,7 @@ def insert_articles_from_links(
     *,
     max_items: int = 30,
     on_progress=None,
+    crawl_task_id: Optional[int] = None,
 ) -> Dict[str, int]:
     """批量落库: 摘要型源直接入库, 其余逐篇抓详情页落库 (单篇失败不中断)。
 
@@ -186,8 +187,26 @@ def insert_articles_from_links(
                     logger.warning("[%s] 无匹配爬虫, 跳过: %s", source_id, link.url)
                     continue
                 item = crawler.run(persist=False)
-            _, created = upsert_article(session, source_id, item)
-            stats["inserted" if created else "existed"] += 1
+            article, created = upsert_article(session, source_id, item)
+            if created:
+                session.flush()
+            outcome = "inserted" if created else "existed"
+            stats[outcome] += 1
+            if crawl_task_id is not None and article is not None:
+                existing_link = session.scalar(
+                    select(CrawlTaskArticle).where(
+                        CrawlTaskArticle.crawl_task_id == crawl_task_id,
+                        CrawlTaskArticle.article_id == article.id,
+                    )
+                )
+                if existing_link is None:
+                    session.add(
+                        CrawlTaskArticle(
+                            crawl_task_id=crawl_task_id,
+                            article_id=article.id,
+                            outcome=outcome,
+                        )
+                    )
         except Exception as exc:  # 单篇失败不影响批次
             logger.warning("[%s] 落库失败 %s: %s", source_id, link.url, exc)
             stats["failed"] += 1
@@ -199,7 +218,11 @@ def insert_articles_from_links(
 
 
 def crawl_and_ingest(
-    source_id: str, *, max_items: int = 30, on_progress=None
+    source_id: str,
+    *,
+    max_items: int = 30,
+    on_progress=None,
+    crawl_task_id: Optional[int] = None,
 ) -> Dict[str, int]:
     """完整管线: discover -> 逐篇抓取 -> 落库 (独立会话)。
 
@@ -213,7 +236,12 @@ def crawl_and_ingest(
         return {"discovered": 0, "inserted": 0, "existed": 0, "failed": 0}
     with SessionLocal() as session:
         stats = insert_articles_from_links(
-            session, source_id, links, max_items=max_items, on_progress=on_progress
+            session,
+            source_id,
+            links,
+            max_items=max_items,
+            on_progress=on_progress,
+            crawl_task_id=crawl_task_id,
         )
         session.commit()
     logger.info("[%s] 落库完成: %s", source_id, stats)

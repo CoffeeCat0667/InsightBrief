@@ -36,6 +36,10 @@ class CrawlTask(TimestampMixin, Base):
     domestic_max_ratio: Mapped[int] = mapped_column(
         Integer, nullable=False, default=100, server_default="100"
     )
+    schedule_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("crawl_schedules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    generate_brief: Mapped[bool] = mapped_column(nullable=False, default=False)
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)

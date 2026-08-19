@@ -21,6 +21,9 @@ class BriefTask(TimestampMixin, Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    origin_crawl_task_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("crawl_tasks.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     stage: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

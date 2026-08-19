@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **抓取任务定时执行与自动简报**:
+  - 抓取页新增“定时任务”：可选择每隔 N 小时、最多执行次数（0=无限）、复用来源/数量上限/国内占比配置，以及“抓取结束后生成简报”开关；启用后立即执行首次抓取。
+  - 数据库持久化 `crawl_schedules` 表，FastAPI 启动后台调度线程按到期时间创建真实 crawl task；`max_runs` 达到上限自动暂停；支持暂停/启用/立即执行/删除（新增 `/api/crawl-schedules` 管理端点，admin-only）。
+  - 自动简报只处理本次抓取 `inserted` 的新文章（`crawl_task_articles` 精确关联），无新增文章不触发；同一 crawl task 最多一个自动 brief task；服务重启可安全补建。
+  - 抓取任务记录 `schedule_id/generate_brief`，简报任务记录 `origin_crawl_task_id`；迁移 `h9c0d1e2f3a4` 已应用。
+
 ### 修复
 
 - **鉴权、审计与任务权限加固**:

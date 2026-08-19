@@ -17,8 +17,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
+from ..crawl_service import CrawlTaskConflictError, create_crawl_task as create_crawl_task_record
 from ...audit_logs import client_ip, write_audit
-from ..models import CrawlTask, Source, User
+from ..models import CrawlTask, User
 from ..schemas import CrawlTaskCreate, CrawlTaskRead, Page, PageParams, TaskCancelRead, TaskCancelRequest, ok
 from ..schemas.task import TaskStatus
 from ..security import get_current_user, require_admin
@@ -101,78 +102,18 @@ def create_crawl_task(
     源集合重叠语义: source_ids 省略/空 = 全部启用源 (全集); 全集与任何
     非空集合必重叠, 因此两边任一方为全集即视为冲突。
     """
-    ids = [s for s in body.source_ids if s] if body.source_ids else []
-    if body.source_ids is not None and ids != body.source_ids:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "message": "source_ids 含空字符串",
-            },
+    try:
+        task = create_crawl_task_record(
+            session,
+            body,
+            user_id=user.id,
+            generate_brief=body.generate_brief,
         )
-    selected_sources = session.scalars(
-        select(Source).where(Source.enabled.is_(True))
-        if not ids
-        else select(Source).where(Source.id.in_(ids), Source.enabled.is_(True))
-    ).all()
-    selected_by_id = {source.id: source for source in selected_sources}
-    requested_ids = list(selected_by_id) if not ids else ids
-    missing_ids = [source_id for source_id in requested_ids if source_id not in selected_by_id]
-    if missing_ids:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "message": f"源不存在或未启用: {missing_ids}",
-            },
-        )
-    if body.domestic_max_ratio < 100 and requested_ids and all(
-        selected_by_id[source_id].is_domestic for source_id in requested_ids
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "validation_error",
-                "message": "国内源占比限制小于 100% 时, 至少选择一个外源",
-            },
-        )
-    duplicates = [
-        t
-        for t in session.scalars(
-            select(CrawlTask).where(
-                CrawlTask.status.in_(
-                    [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]
-                )
-            )
-        ).all()
-        if not t.source_ids or not ids or set(t.source_ids) & set(ids)
-    ]
-    if duplicates:
-        existing = duplicates[0]
-        message = (
-            f"全部源抓取已在进行中 (任务 {existing.id})"
-            if not ids
-            else f"源 {ids} 已在任务 {existing.id} 中抓取中"
-            if existing.source_ids and set(existing.source_ids) & set(ids)
-            else f"源集合与进行中任务 {existing.id} (全源) 重叠"
-        )
+    except CrawlTaskConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "conflict", "message": message},
+            detail={"code": "conflict", "message": f"源集合与进行中任务 {exc} 重叠"},
         )
-    task = CrawlTask(
-        user_id=user.id,
-        status=TaskStatus.PENDING.value,
-        source_ids=body.source_ids,
-        max_items=body.max_items,
-        domestic_max_ratio=body.domestic_max_ratio,
-    )
-    session.add(task)
-    session.flush()
-    session.commit()
-    task = session.get(CrawlTask, task.id)
-    try:
-        manager.dispatch(task.id, kind="crawl")
     except RuntimeError:
         write_audit(
             user_id=user.id,
@@ -183,6 +124,7 @@ def create_crawl_task(
                 "source_ids": body.source_ids,
                 "max_items": body.max_items,
                 "domestic_max_ratio": body.domestic_max_ratio,
+                "generate_brief": body.generate_brief,
                 "dispatch_failed": True,
             },
             ip=client_ip(request),
@@ -200,6 +142,7 @@ def create_crawl_task(
             "source_ids": body.source_ids,
             "max_items": body.max_items,
             "domestic_max_ratio": body.domestic_max_ratio,
+            "generate_brief": body.generate_brief,
         },
         ip=client_ip(request),
     )

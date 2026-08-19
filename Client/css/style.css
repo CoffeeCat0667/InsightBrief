@@ -398,6 +398,9 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
 .run-dot.ok { color: var(--ok); }
 .run-dot.err { color: var(--err); }
 .run-dot.skipped { color: var(--text-3); }
+.schedule-row { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.schedule-meta { color: var(--text-3); font-size: 12.5px; }
+.schedule-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
 .event-log {
   background: var(--code-bg);
@@ -468,5 +471,7 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
   .topbar { padding: 10px 12px; gap: 8px; }
   .user-name { display: none; }
   .field-row { flex-direction: column; gap: 0; }
+  .schedule-row { grid-template-columns: 1fr; gap: 5px; }
+  .schedule-actions { justify-content: flex-start; }
   .toolbar .input, .toolbar .select { width: 100%; }
 }

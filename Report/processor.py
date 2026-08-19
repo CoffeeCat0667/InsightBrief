@@ -300,7 +300,9 @@ class BriefProcessor:
             .join(Source, Article.source_id == Source.id)
             .where(Source.enabled.is_(True))
         )
-        if params.get("source_ids"):
+        if params.get("article_ids"):
+            stmt = stmt.where(Article.id.in_(params["article_ids"]))
+        elif params.get("source_ids"):
             stmt = stmt.where(Article.source_id.in_(params["source_ids"]))
         if params.get("category"):
             stmt = stmt.where(Article.category == params["category"])

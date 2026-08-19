@@ -35,6 +35,7 @@ from .brief import (
     BriefTaskRead,
 )
 from .source import SourceCreate, SourceKind, SourceRead, SourceUpdate
+from .schedule import CrawlScheduleCreate, CrawlScheduleRead, CrawlScheduleUpdate
 from .task import (
     CrawlRunRead,
     CrawlRunStatus,
@@ -65,6 +66,9 @@ __all__ = [
     "CrawlRunStatus",
     "CrawlTaskCreate",
     "CrawlTaskRead",
+    "CrawlScheduleCreate",
+    "CrawlScheduleRead",
+    "CrawlScheduleUpdate",
     "ErrorCode",
     "LoginRequest",
     "Page",
