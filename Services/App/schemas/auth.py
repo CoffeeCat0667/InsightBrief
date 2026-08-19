@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -54,3 +54,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int = 86400
     user: UserRead
+    visible_tabs: Optional[List[str]] = None
+
+
+class MeRead(BaseModel):
+    """GET /api/auth/me 响应: 当前用户 + 可见选项卡。"""
+
+    user: UserRead
+    visible_tabs: List[str]

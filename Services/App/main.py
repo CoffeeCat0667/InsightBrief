@@ -18,7 +18,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import SessionLocal
-from .routers import articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
+from .admin_settings import sync_registration_default
+from .routers import admin, articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
 from .sync import ensure_schema, run_llm_sync, run_sources_sync
@@ -41,6 +42,7 @@ def _bootstrap() -> None:
     run_llm_sync()
     with SessionLocal() as session:
         seed_all(session)
+        sync_registration_default(session)
     _lifespan_done = True
 
 
@@ -128,6 +130,7 @@ def health():
 
 app.include_router(auth.router)
 app.include_router(sources.router)
+app.include_router(admin.router)
 app.include_router(articles.router)
 app.include_router(articles.platforms_router)
 app.include_router(tasks.router)

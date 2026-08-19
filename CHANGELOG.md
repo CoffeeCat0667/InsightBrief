@@ -6,11 +6,13 @@
 
 ### 新增
 
-- **抓取任务定时执行与自动简报**:
-  - 抓取页新增“定时任务”：可选择每隔 N 小时、最多执行次数（0=无限）、复用来源/数量上限/国内占比配置，以及“抓取结束后生成简报”开关；启用后立即执行首次抓取。
-  - 数据库持久化 `crawl_schedules` 表，FastAPI 启动后台调度线程按到期时间创建真实 crawl task；`max_runs` 达到上限自动暂停；支持暂停/启用/立即执行/删除（新增 `/api/crawl-schedules` 管理端点，admin-only）。
-  - 自动简报只处理本次抓取 `inserted` 的新文章（`crawl_task_articles` 精确关联），无新增文章不触发；同一 crawl task 最多一个自动 brief task；服务重启可安全补建。
-  - 抓取任务记录 `schedule_id/generate_brief`，简报任务记录 `origin_crawl_task_id`；迁移 `h9c0d1e2f3a4` 已应用。
+- **管理面板**:
+  - 顶栏在明/暗切换旁新增“管理面板”按钮，仅管理员可见；非管理员不显示。
+  - 用户管理：查看全部注册用户，可修改任意用户的用户名/密码/角色（admin/user），并阻止移除最后一个管理员。
+  - 注册入口开关：管理员可开/关公开注册；关闭后注册接口返回 403，前端隐藏注册选项卡。
+  - LLM 配置：前端可修改 `base_url/api_key/model_id`；保存前先连通性检查（最小 chat 请求），可用才同时写回 `Config/LLM.json` 与 PG `system_settings` 并清缓存，不可用则不改写并返回错误。
+  - 非管理员可见选项卡：管理员可配置非管理员可见的文章/简报/抓取任务/新闻源；审计/管理面板始终对非管理员隐藏；登录及 `/me` 返回 `visible_tabs`，前端按此过滤导航。
+  - 新增 `/api/admin/*` 与 `/api/auth/registration` 端点（admin 写操作审计，LLM 审计不含 api_key，用户审计不含密码）。
 
 ### 修复
 

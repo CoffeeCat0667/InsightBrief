@@ -1,6 +1,7 @@
 // API 封装: Bearer 注入 / 401 登出 / 统一错误 toast
 const TOKEN_KEY = "ib_token";
 const USER_KEY = "ib_user";
+const TABS_KEY = "ib_tabs";
 
 export const store = {
   get token() { return localStorage.getItem(TOKEN_KEY) || ""; },
@@ -8,13 +9,17 @@ export const store = {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); }
     catch { return null; }
   },
-  setAuth(token, user) {
+  get tabs() { return JSON.parse(localStorage.getItem(TABS_KEY) || "null"); },
+  setAuth(token, user, tabs = null) {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (tabs) localStorage.setItem(TABS_KEY, JSON.stringify(tabs));
   },
+  setTabs(tabs) { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)); },
   clear() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(TABS_KEY);
   },
 };
 

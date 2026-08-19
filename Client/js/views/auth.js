@@ -1,7 +1,7 @@
 // 登录 / 注册视图
 import { api, store, toast, toastErr } from "../api.js";
 
-export function authView(root) {
+export async function authView(root) {
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand">
@@ -45,18 +45,29 @@ export function authView(root) {
       <div class="auth-hint">抓取与简报任务在服务端后台执行, 刷新页面不中断;</div>
     </div>`;
 
-  const tabs = root.querySelectorAll(".tab");
-  const loginTab = root.querySelector("#tab-login");
-  const registerTab = root.querySelector("#tab-register");
-  const submit = root.querySelector("#auth-submit");
-  tabs.forEach((t) => t.addEventListener("click", () => {
-    tabs.forEach((x) => x.classList.remove("active"));
-    t.classList.add("active");
-    const mode = t.dataset.tab;
-    loginTab.classList.toggle("hidden", mode !== "login");
-    registerTab.classList.toggle("hidden", mode !== "register");
-    submit.textContent = mode === "login" ? "登录" : "注册并登录";
-  }));
+      const tabs = root.querySelectorAll(".tab");
+      const loginTab = root.querySelector("#tab-login");
+      const registerTab = root.querySelector("#tab-register");
+      const submit = root.querySelector("#auth-submit");
+
+      // 关闭注册入口时隐藏注册选项卡
+      let registrationEnabled = true;
+      tabs.forEach((t) => t.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.remove("active"));
+        t.classList.add("active");
+        const mode = t.dataset.tab;
+        loginTab.classList.toggle("hidden", mode !== "login");
+        registerTab.classList.toggle("hidden", mode !== "register");
+        submit.textContent = mode === "login" ? "登录" : "注册并登录";
+      }));
+      try {
+        const reg = await api.get("/api/auth/registration");
+        registrationEnabled = reg.enabled !== false;
+      } catch { /* 默认开放 */ }
+      if (!registrationEnabled) {
+        root.querySelectorAll('.tab[data-tab="register"]').forEach((x) => x.classList.add("hidden"));
+        root.querySelector("#tab-register").classList.add("hidden");
+      }
 
   root.querySelector("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();

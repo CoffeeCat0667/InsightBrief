@@ -7,6 +7,7 @@ import { crawlView } from "./views/crawl.js";
 import { briefView } from "./views/brief.js";
 import { sourcesView } from "./views/sources.js";
 import { auditView } from "./views/audit.js";
+import { adminView } from "./views/admin.js";
 
 const THEME_KEY = "ib_theme"; // auto | light | dark
 
@@ -18,12 +19,15 @@ const NAV = [
   { hash: "audit", icon: "i-audit", label: "审计日志", admin: true },
 ];
 
+const NAV_KEYS = { articles: "articles", brief: "brief", crawl: "crawl", sources: "sources" };
+
 const VIEWS = {
   articles: articlesView,
   brief: briefView,
   crawl: crawlView,
   sources: sourcesView,
   audit: auditView,
+  admin: adminView,
 };
 
 let layoutReady = false;
@@ -31,6 +35,12 @@ let layoutReady = false;
 export const isAdmin = () => store.user?.role?.code === "admin";
 
 const $ = (id) => document.getElementById(id);
+
+function visibleNav() {
+  if (isAdmin()) return NAV;
+  const allowed = store.tabs || Object.keys(NAV_KEYS);
+  return NAV.filter((n) => !n.admin && allowed.includes(n.hash));
+}
 
 function applyTheme() {
   const mode = localStorage.getItem(THEME_KEY) || "auto";
@@ -46,8 +56,8 @@ function applyTheme() {
 function renderLayout() {
   $("auth-shell").classList.add("hidden");
   $("app-shell").classList.remove("hidden");
-  $("side-nav").innerHTML = NAV
-    .filter((n) => !n.admin || isAdmin())
+  const showNav = visibleNav();
+  $("side-nav").innerHTML = showNav
     .map((n) => `
       <button class="nav-item" data-hash="${n.hash}">
         <svg><use href="#${n.icon}"/></svg><span>${n.label}</span>
@@ -60,12 +70,16 @@ function renderLayout() {
   roleEl.textContent = isAdmin() ? "admin" : "user";
   roleEl.className = `role-badge ${isAdmin() ? "admin" : ""}`;
 
+  const adminBtn = $("admin-btn");
+  if (adminBtn) adminBtn.style.display = isAdmin() ? "" : "none";
+
   $("side-nav").querySelectorAll(".nav-item").forEach((el) => {
     el.addEventListener("click", () => {
       location.hash = `#/${el.dataset.hash}`;
       document.querySelector(".sidebar")?.classList.remove("open");
     });
   });
+  if (adminBtn) adminBtn.addEventListener("click", () => { location.hash = "#/admin"; });
   $("logout-btn").addEventListener("click", () => {
     store.clear();
     location.hash = "#/";
@@ -102,15 +116,19 @@ async function route() {
     layoutReady = true;
   }
   let hash = (location.hash || "#/articles").replace(/^#\/?/, "").split("/")[0] || "articles";
+  const allow = visibleNav().map((n) => n.hash);
+  if (!isAdmin()) {
+    if (hash === "admin" || !allow.includes(hash)) hash = allow[0] || "articles";
+  }
   let view = VIEWS[hash] || articlesView;
   if (view.admin && !isAdmin()) {
     view = articlesView;
-    hash = "articles";
+    hash = allow[0] || "articles";
   }
   $("side-nav").querySelectorAll(".nav-item").forEach((el) => {
     el.classList.toggle("active", el.dataset.hash === hash);
   });
-  const def = NAV.find((n) => n.hash === hash);
+  const def = visibleNav().find((n) => n.hash === hash);
   $("page-title").textContent = def ? def.label : "文章";
   $("view-root").innerHTML = `<div class="skeleton" style="height:90px;margin-bottom:14px"></div>`;
   try {
