@@ -1,5 +1,5 @@
 // Hash 路由 + 布局渲染 + 角色门卫 + 主题(跟随系统 + 手动覆盖)
-import { store, setUnauthorizedHandler, toast } from "./api.js";
+import { store, api, setUnauthorizedHandler, toast } from "./api.js";
 import { esc } from "./util.js";
 import { authView } from "./views/auth.js";
 import { articlesView } from "./views/articles.js";
@@ -20,6 +20,7 @@ const NAV = [
 ];
 
 const NAV_KEYS = { articles: "articles", brief: "brief", crawl: "crawl", sources: "sources" };
+const DEFAULT_NON_ADMIN_TABS = ["articles", "brief"];
 
 const VIEWS = {
   articles: articlesView,
@@ -38,7 +39,7 @@ const $ = (id) => document.getElementById(id);
 
 function visibleNav() {
   if (isAdmin()) return NAV;
-  const allowed = store.tabs || Object.keys(NAV_KEYS);
+  const allowed = store.tabs || DEFAULT_NON_ADMIN_TABS;
   return NAV.filter((n) => !n.admin && allowed.includes(n.hash));
 }
 
@@ -112,6 +113,13 @@ async function route() {
     return;
   }
   if (!layoutReady) {
+    if (!isAdmin() && !store.tabs) {
+      // 本地无可见选项卡缓存时先从 /me 拉取，再渲染布局
+      try {
+        const me = await api.get("/api/auth/me");
+        store.setTabs(me.visible_tabs || DEFAULT_NON_ADMIN_TABS);
+      } catch { /* 保持默认 */ }
+    }
     renderLayout();
     layoutReady = true;
   }

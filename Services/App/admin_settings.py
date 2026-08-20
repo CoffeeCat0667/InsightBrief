@@ -21,6 +21,7 @@ _TABS_KEY = "non_admin_tabs"
 _LLM_KEY = "llm"
 
 ALL_TABS = ("articles", "brief", "crawl", "sources")
+DEFAULT_NON_ADMIN_TABS = ("articles", "brief")
 
 
 class LLMProbeError(RuntimeError):
@@ -59,8 +60,8 @@ def get_non_admin_tabs(session: Session) -> List[str]:
     value = _get_setting(session, _TABS_KEY)
     tabs = (value or {}).get("tabs")
     if tabs is None:
-        return list(ALL_TABS)
-    return [tab for tab in tabs if tab in ALL_TABS] or list(ALL_TABS)
+        return list(DEFAULT_NON_ADMIN_TABS)
+    return [tab for tab in tabs if tab in ALL_TABS] or list(DEFAULT_NON_ADMIN_TABS)
 
 
 def set_non_admin_tabs(session: Session, tabs: List[str]) -> List[str]:

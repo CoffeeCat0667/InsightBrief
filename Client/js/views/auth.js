@@ -82,13 +82,13 @@ export async function authView(root) {
     try {
       if (mode === "login") {
         const data = await api.postForm("/api/auth/login", { username, password });
-        store.setAuth(data.access_token, data.user);
+        store.setAuth(data.access_token, data.user, data.visible_tabs);
         toast(`欢迎回来, ${data.user.username}`, "ok");
       } else {
         const email = root.querySelector(`${sel} input[name=email]`).value.trim() || undefined;
         await api.post("/api/auth/register", { username, password, email });
         const data = await api.postForm("/api/auth/login", { username, password });
-        store.setAuth(data.access_token, data.user);
+        store.setAuth(data.access_token, data.user, data.visible_tabs);
         toast("注册成功, 已自动登录", "ok");
       }
       setTimeout(() => location.reload(), 400);

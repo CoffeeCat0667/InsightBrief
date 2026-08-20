@@ -93,7 +93,7 @@ export async function adminView(root) {
 
   // ---- 非管理员选项卡 ----
   const chipBox = root.querySelector("#tab-chips");
-  const chosen = new Set(Object.keys(TAB_LABELS));
+  const chosen = new Set(["articles", "brief"]);
   chipBox.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
     c.classList.toggle("active");
     if (c.classList.contains("active")) chosen.add(c.dataset.tab);
