@@ -20,7 +20,7 @@ from .article import (
     PlatformRead,
 )
 from .audit_log import AuditLogRead
-from .admin import LLMSettingsUpdate, RegistrationUpdate, TabsUpdate, UserAdminRead, UserAdminUpdate
+from .admin import LLMSettingsUpdate, RegistrationUpdate, TabsUpdate, UserAdminCreate, UserAdminRead, UserAdminUpdate
 from .auth import (
     LoginRequest,
     MeRead,
@@ -90,6 +90,7 @@ __all__ = [
     "TaskCancelRequest",
     "TaskStatus",
     "TokenResponse",
+    "UserAdminCreate",
     "UserAdminRead",
     "UserAdminUpdate",
     "UserRead",

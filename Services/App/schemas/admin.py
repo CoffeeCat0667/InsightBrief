@@ -19,6 +19,17 @@ class UserAdminRead(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class UserAdminCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_]+$")
+    password: str = Field(min_length=8, max_length=128)
+    role: str = Field(pattern=r"^(admin|user)$")
+    email: Optional[str] = None
+
+    def model_post_init(self, __context) -> None:
+        if len(self.password.encode("utf-8")) > 72:
+            raise ValueError("密码不能超过 72 个 UTF-8 字节")
+
+
 class UserAdminUpdate(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_]+$")
     password: Optional[str] = Field(default=None, min_length=8, max_length=128)

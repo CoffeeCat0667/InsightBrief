@@ -44,7 +44,10 @@ export async function adminView(root) {
     </div>
 
     <div class="card">
-      <div class="section-title" style="margin-top:0">用户管理</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="section-title" style="margin:0">用户管理</div>
+        <button class="btn" id="user-new">+ 新增用户</button>
+      </div>
       <div id="admin-users"><div class="skeleton" style="height:60px"></div></div>
     </div>`;
 
@@ -112,6 +115,7 @@ export async function adminView(root) {
   });
 
   // ---- 用户管理 ----
+  root.querySelector("#user-new").addEventListener("click", () => newUserModal(root, renderUsers));
   await renderUsers(root);
 }
 
@@ -130,13 +134,77 @@ async function renderUsers(root) {
         <td>${esc(u.role_code || "—")}</td>
         <td>${u.is_active ? "启用" : "禁用"}</td>
         <td style="color:var(--text-3)">${fmtDateTime(u.created_at)}</td>
-        <td><button class="btn ghost sm" data-edit-user="${u.id}">编辑</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn ghost sm" data-edit-user="${u.id}">编辑</button>
+          <button class="btn ghost danger sm" data-del-user="${u.id}">删除</button>
+        </td>
       </tr>`).join("")}</tbody>
     </table></div>`;
   box.querySelectorAll("[data-edit-user]").forEach((b) => b.addEventListener("click", () => {
     const u = users.find((x) => x.id === Number(b.dataset.editUser));
     editUserModal(root, u, renderUsers);
   }));
+  box.querySelectorAll("[data-del-user]").forEach((b) => b.addEventListener("click", async () => {
+    const u = users.find((x) => x.id === Number(b.dataset.delUser));
+    if (!window.confirm(`确定删除用户 "${u.username}" ?\n存在业务数据时将改为禁用。`)) return;
+    try {
+      const r = await api.delete(`/api/admin/users/${u.id}`);
+      if (r?.disabled) toastOk(`用户 ${u.username} 存在业务数据, 已禁用`);
+      else toastOk(`用户 ${u.username} 已删除`);
+      renderUsers(root);
+    } catch (e) { toastErr(e.message); }
+  }));
+}
+
+function newUserModal(root, onDone) {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto`;
+  overlay.innerHTML = `
+    <div class="card" style="max-width:460px;width:100%">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <b style="font-size:16px">新增用户</b>
+        <button class="icon-btn">✕</button>
+      </div>
+      <form id="user-new-form">
+        <div class="field"><label class="label">用户名</label>
+          <input class="input" id="new-username" placeholder="3-64 位字母/数字/下划线"></div>
+        <div class="field"><label class="label">密码</label>
+          <input class="input" id="new-password" type="password" autocomplete="new-password" placeholder="至少 8 位"></div>
+        <div class="field"><label class="label">邮箱 (可选)</label>
+          <input class="input" id="new-email" type="email" placeholder="xxx@example.com"></div>
+        <div class="field"><label class="label">角色</label>
+          <select class="select" id="new-role">
+            <option value="user" selected>普通用户</option>
+            <option value="admin">管理员</option>
+          </select></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn ghost" data-close>取消</button>
+          <button type="submit" class="btn">创建</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector("[data-close]").addEventListener("click", close);
+  overlay.querySelector(".icon-btn").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); }, { once: true });
+  overlay.querySelector("#user-new-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const body = {
+      username: overlay.querySelector("#new-username").value.trim(),
+      password: overlay.querySelector("#new-password").value,
+      role: overlay.querySelector("#new-role").value,
+    };
+    const email = overlay.querySelector("#new-email").value.trim();
+    if (email) body.email = email;
+    try {
+      await api.post("/api/admin/users", body);
+      toastOk(`用户 ${body.username} 已创建`);
+      close();
+      onDone(root);
+    } catch (err) { toastErr(err.message); }
+  });
 }
 
 function editUserModal(root, user, onDone) {
