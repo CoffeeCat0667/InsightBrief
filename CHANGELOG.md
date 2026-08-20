@@ -2,6 +2,45 @@
 
 本仓库所有值得记录的变更均按时间倒序记录于此。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Ver0.2.0] - 2026-08-20
+
+InsightBrief 0.2.0：Web 产品化能力、管理能力、定时抓取与无 Hash 路由完整落地。
+
+### 新增
+
+- **History API 路由**：前端 URL 改为 `/articles`、`/brief`、`/crawl`、`/sources`、`/admin`；FastAPI 对非 `/api` 未命中的路径回退 `index.html`，支持刷新深层链接；未知 `/api/*` 保持 404。
+- **定时抓取**：数据库持久化 `crawl_schedules`，每 N 小时调度，首次启用立即执行；`max_runs=0` 无限循环，达到正数上限自动暂停；冲突时顺延，不并发执行。
+- **自动简报**：抓取任务可开启 `generate_brief`；通过 `crawl_task_articles` 精确关联本轮文章，只对本次 `inserted` 新文章生成简报；无新增或抓取失败/取消不触发；重启可补偿且同一抓取最多一条简报。
+- **国内源比例限制**：抓取任务支持 `domestic_max_ratio`（0–100），外源优先并按成功新闻数计算国内共享配额，配额耗尽源标记 `skipped`。
+- **管理面板**：管理员可查看、新增、编辑、删除/软禁用用户；修改角色；开关注册入口；设置非管理员可见选项卡；修改 LLM `base_url/api_key/model_id` 前先做连通性检查，成功后双写 JSON 与 PG。
+- **管理员权限与前端可见性**：管理面板按钮仅 admin 显示；非管理员默认只见文章/简报，可由 admin 配置文章/简报/抓取任务/新闻源可见子集；审计和管理面板始终隐藏。
+- **管理员用户 CRUD**：新增 `POST /api/admin/users` 和 `DELETE /api/admin/users/{id}`；有业务外键引用时删除自动转软禁用，不能删除自己或最后一个管理员。
+
+### 修复
+
+- `api.put is not a function`：API 封装补充 PUT 方法，管理面板保存功能恢复。
+- 定时任务表单紧凑布局：自动简报开关文字横排，空状态内联显示，组件垂直居中。
+- 普通用户可进入管理员不可用功能的前端路由问题：导航按 `visible_tabs` 过滤并阻止直接路径访问。
+- SPA fallback 正确捕获 Starlette 静态文件 404，避免 History 深链刷新失败或未知 API 被错误返回 HTML。
+- 继续保留前序安全修复：登录限流、dummy bcrypt、72 UTF-8 字节密码边界、可信 XFF、任务取消 admin-only、注册竞态 409、审计 action 索引。
+
+### 变更
+
+- 版本统一为 `0.2.0`（Core 版本、FastAPI 版本、README badge）。
+- Alembic 当前版本：`h9c0d1e2f3a4`；新增定时任务、自动简报关联及抓取任务配置字段。
+- LLM api_key 仍按既定决策明文保存；管理面板仅在 probe 成功后写入，不把 api_key 写入审计日志。
+- 历史审计 PII 清理不在自动迁移链中执行；`f7a8b9c0d1e2` 仅创建 `audit_logs.action` 索引。
+- `buglist.md` 保持本地审查文件，不纳入发布提交。
+
+### 验证
+
+- Python `compileall`、全量 JS `node --check`、`git diff --check`。
+- 真实服务健康检查、OpenAPI 路由注册、History 深链 HTML fallback、未知 API 404。
+- 定时任务 schema/调度状态/次数上限/冲突顺延单元验证。
+- 自动简报 inserted-only、无新增跳过、失败抓取不触发、唯一关联验证。
+- 管理面板用户新增/重名冲突/自己删除保护/最后管理员保护/引用用户软禁用/无引用硬删验证。
+- LLM probe 成功/失败路径验证，失败时不写配置。
+
 ## [Unreleased]
 
 ### 新增
@@ -20,7 +59,7 @@
   - 抓取/简报任务取消端点改为 admin-only，普通用户不再能中断管理员任务；终态任务的无效取消不再写入噪音审计。
   - 登录失败按客户端 IP 执行 Redis 共享滑动窗口限流（Redis 不可用时进程内降级），达到阈值返回 429 与 `Retry-After`；不存在用户仍执行 dummy bcrypt 校验，减少用户名计时枚举。
   - bcrypt 密码改为拒绝超过 72 个 UTF-8 字节的输入，取消静默截断；空库初始化必须显式设置 `ADMIN_PASSWORD`，不再创建默认密码管理员。
-  - 认证审计 detail 不再写 username/email；迁移会清洗既有认证审计 PII，并为 `audit_logs.action` 新建索引。
+  - 认证审计 detail 不再写 username/email；`audit_logs.action` 建索引，历史认证 PII 清理不在自动迁移链中执行。
   - 仅当 socket 对端在 `trusted_proxy_ips` 配置中时才采信 `X-Forwarded-For`，防止直连客户端伪造审计来源 IP。
   - 注册唯一键并发冲突改为 409；worker submit 失败时任务落为 failed，避免 pending 残留与成功创建审计不一致。
 - **栏目页广告过滤稳健化**: 广告识别覆盖链接自身及祖先的 class，采用边界匹配避免 `advanced` 等正常 class 被误伤；先完整收集广告 URL 再过滤候选，消除同 URL 出现顺序造成的漏网。
@@ -32,8 +71,8 @@
   - 后端以 `Source.is_domestic` 为唯一分类依据，先抓外源，按成功新闻数（新增 + 已存在）计算国内共享硬配额：`floor(外源成功数 × 比例 / (100 - 比例))`；配额耗尽的国内源记为 `skipped` 并通过 SSE 推送。
   - 任务持久化 `domestic_max_ratio`，新增 Alembic 迁移 `g8b9c0d1e2f3`；比例小于 100% 时，纯国内源任务返回 422。
 
-- **前端单页应用 `Client/`(原生 JS, 用户批准重启前端实现)**:
-  - 零构建零依赖(ES Modules + hash 路由),FastAPI 静态挂载至 `/`(main.py 一行, 注册于 API 路由之后, 不遮挡 `/api` 与 `/docs`);启动服务后直接访问 `http://127.0.0.1:8000/`
+- **前端单页应用 `Client/`(原生 JS)**:
+  - 零构建零依赖(ES Modules + **History API 路由**, URL 无 `#`),FastAPI 静态挂载 + SPA fallback；启动服务后可直接访问 `/articles`、`/brief`、`/crawl`、`/admin`
   - 7 视图: 登录/注册、文章(搜索/分类筛选/详情抽屉: 摘要/全文翻译/内容片段)、抓取任务(源多选 + max_items + **SSE 实时进度**: 进度条/runs 徽章链/事件日志/取消)、简报(分类/源/时间窗 + **SSE 阶段进度** + 存档卡片阅读)、新闻源管理(admin CRUD + 启用开关 + config 三类模板)、审计日志(admin 筛选 + detail JSON 展开)、平台(26 卡片)
   - **SSE 客户端自研**: fetch + ReadableStream 手写解析(原生 EventSource 无法携带 Authorization 头, 规避 token 进 URL/日志);兼容心跳 `: ping`、多行 data、终态关流
   - 视觉: 双主题跟随系统 `prefers-color-scheme`(顶栏可手动覆盖 auto/light/dark)、CSS 变量主题、状态徽章语义色、卡片悬浮动效、skeleton 加载、toast、响应式(移动端侧栏抽屉)
@@ -65,15 +104,15 @@
 
 ### 新增
 
-- **audit_logs 写入落地**(关键操作留痕):
-  - `Services/audit_logs/` 独立包: `write_audit`(独立会话提交 + detail 深拷贝; 任何异常只告警返回 False, **审计绝不炸主业务**) + `client_ip`(client.host 优先, X-Forwarded-For 首段兜底)
-  - 13 个调用点: `user.register`/`user.register_failed`/`user.login`/`user.login_failed`(含禁用 403)/`source.create`/`source.update`/`source.delete`/`source.disable`(软禁用)/`crawl_task.create`/`crawl_task.cancel`/`brief_task.create`/`brief_task.cancel`; action 命名 `{object}.{verb}`(失败加 `_failed`), detail 记录变更内容 + 客户端 IP
+- **audit_logs 写入落地**(历史记录):
+  - `Services/audit_logs/` 独立包: `write_audit`(独立会话提交 + detail 深拷贝; 任何异常只告警返回 False, **审计绝不炸主业务**) + `client_ip`(可信反代才采信 X-Forwarded-For 首段)
+  - 14 个写入分支（12 类 action）: `user.register`/`user.register_failed`/`user.login`/`user.login_failed`(含禁用 403)/`source.create`/`source.update`/`source.delete`/`source.disable`(软禁用)/`crawl_task.create`/`crawl_task.cancel`/`brief_task.create`/`brief_task.cancel`; action 命名 `{object}.{verb}`(失败加 `_failed`), detail 记录变更内容 + 客户端 IP
   - `GET /api/audit-logs`(admin-only): action/user_id 筛选 + 分页, 按时间倒序; 无 token 401 / 非 admin 403
   - 验证: import 冒烟 + e2e 20/20 全绿(含软禁用分支/401/403/筛选/12 种 action 全集/ip 采集)+ psql 核对 JSONB 落库 + write_audit 异常容错冒烟; 测试数据已清理
 
 ### 回滚
 
-- **前端已回滚** (revert eec51a9, 撤销 eec5241): 单页前端(登录/文章浏览/抓取触发+SSE/简报面板)整块撤销 — **用户拍板不做前端**;Web 后端功能继续经 REST API + `/docs` 使用。`Services/App/static/` 已删除, 版本字段回到 0.1.2。
+- **前端已回滚** (历史记录，Ver0.1 阶段): 曾撤销早期前端实现；Ver0.2.0 已重新实现并改为 History SPA，详见本版本新增项。
 
 ### 修复
 

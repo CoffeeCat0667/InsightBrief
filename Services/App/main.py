@@ -66,7 +66,7 @@ _docs_enabled = os.environ.get("IB_DISABLE_DOCS", "").lower() not in {"1", "true
 
 app = FastAPI(
     title="InsightBrief API",
-    version="0.1.2",
+    version="0.2.0",
     description="新闻抓取/翻译/简报 Web 后端",
     lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,

@@ -3,7 +3,7 @@
 Core primitives shared by all news crawler implementations.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .base import BaseNewsCrawler
 from .fetchers import (
