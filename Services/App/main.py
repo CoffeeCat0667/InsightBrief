@@ -16,6 +16,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .db import SessionLocal
 from .admin_settings import sync_registration_default
@@ -152,4 +154,19 @@ if os.path.isdir(_client_dir):
             response.headers["Cache-Control"] = "no-cache"
             return response
 
-    app.mount("/", _NoCacheStaticFiles(directory=_client_dir, html=True), name="static")
+    class _SpaStaticFiles(_NoCacheStaticFiles):
+        """SPA fallback: 非 /api 路径未命中静态文件时回退 index.html。"""
+
+        async def get_response(self, path, scope):
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                root_path = scope.get("root_path", "")
+                full = path.replace("\\", "/")
+                if root_path:
+                    full = root_path.lstrip("/") + "/" + full
+                if exc.status_code == 404 and not full.startswith("api/"):
+                    return await super().get_response("index.html", scope)
+                raise
+
+    app.mount("/", _SpaStaticFiles(directory=_client_dir, html=True), name="static")

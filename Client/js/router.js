@@ -1,4 +1,4 @@
-// Hash 路由 + 布局渲染 + 角色门卫 + 主题(跟随系统 + 手动覆盖)
+// History 路由 (pushState/popstate) + 布局渲染 + 角色门卫 + 主题(跟随系统 + 手动覆盖)
 import { store, api, setUnauthorizedHandler, toast } from "./api.js";
 import { esc } from "./util.js";
 import { authView } from "./views/auth.js";
@@ -43,6 +43,19 @@ function visibleNav() {
   return NAV.filter((n) => !n.admin && allowed.includes(n.hash));
 }
 
+function currentHash() {
+  // 解析当前路径 (或兼容旧 #/ 链接) 的第一段作为视图 key
+  const raw = location.pathname || "/";
+  const parts = raw.replace(/^\/+/, "").split("/");
+  let key = parts[0] || "";
+  if (!key) {
+    // 兼容旧的 #/articles 直达链接
+    const m = (location.hash || "").match(/^#\/?([^/?#]+)/);
+    key = m ? m[1] : "";
+  }
+  return key || "articles";
+}
+
 function applyTheme() {
   const mode = localStorage.getItem(THEME_KEY) || "auto";
   const dark = mode === "dark" || (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -52,6 +65,15 @@ function applyTheme() {
     const cur = mode === "auto" ? (dark ? "dark" : "light") : mode;
     btn.innerHTML = `<svg><use href="#${cur === "dark" ? "i-sun" : "i-moon"}"/></svg>`;
   }
+}
+
+function navigate(path) {
+  if (location.pathname === path && !location.hash) {
+    route();
+    return;
+  }
+  history.pushState(null, "", path);
+  route();
 }
 
 function renderLayout() {
@@ -76,14 +98,14 @@ function renderLayout() {
 
   $("side-nav").querySelectorAll(".nav-item").forEach((el) => {
     el.addEventListener("click", () => {
-      location.hash = `#/${el.dataset.hash}`;
+      navigate(`/${el.dataset.hash}`);
       document.querySelector(".sidebar")?.classList.remove("open");
     });
   });
-  if (adminBtn) adminBtn.addEventListener("click", () => { location.hash = "#/admin"; });
+  if (adminBtn) adminBtn.addEventListener("click", () => navigate("/admin"));
   $("logout-btn").addEventListener("click", () => {
     store.clear();
-    location.hash = "#/";
+    navigate("/");
     location.reload();
   });
   $("theme-toggle").addEventListener("click", () => {
@@ -123,7 +145,7 @@ async function route() {
     renderLayout();
     layoutReady = true;
   }
-  let hash = (location.hash || "#/articles").replace(/^#\/?/, "").split("/")[0] || "articles";
+  let hash = currentHash();
   const allow = visibleNav().map((n) => n.hash);
   if (!isAdmin()) {
     if (hash === "admin" || !allow.includes(hash)) hash = allow[0] || "articles";
@@ -148,10 +170,10 @@ async function route() {
 }
 
 setUnauthorizedHandler(() => {
-  location.hash = "#/";
+  navigate("/");
   location.reload();
 });
 
-window.addEventListener("hashchange", route);
+window.addEventListener("popstate", route);
 applyTheme();
 document.addEventListener("DOMContentLoaded", route);
