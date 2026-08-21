@@ -1,6 +1,6 @@
 {
   "proxy": {
-    "default": "http://127.0.0.1:7897"
+    "default": ""
   },
   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "fetch": {
@@ -32,10 +32,10 @@
       "window_seconds": 300
     },
     "trusted_proxy_ips": [],
-    "jwt_secret": "RgdVdrmBVxIt43_RlHSGMeNPcLV8eCd4Fc0fJFRoWBAXjoxkBigitIJfMVemrImQ",
+    "jwt_secret": "",
     "jwt_expire_seconds": 86400,
-    "admin_username": "admin",
-    "admin_password": "e_X9baa029SP73ywuF9AhZ3wqw9Iwvxt"
+    "admin_username": "",
+    "admin_password": ""
   },
   "web": {
     "disable_docs": false

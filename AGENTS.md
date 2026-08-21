@@ -29,8 +29,8 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 - **FastAPI** entry: `Services/App/main.py`. Lifespan bootstraps DB, syncs config→DB, seeds roles/admin, starts schedule thread.
 - **SPA frontend**: `Client/` — vanilla HTML/CSS/JS, zero build. FastAPI serves static files with SPA fallback for History routes. URLs have no `#`.
-- **Config is JSON-only** (`Config/*.json` loaded by `Config/config.py` with `lru_cache`). No env vars read at runtime. Changing config files requires process restart.
-- **Alembic** migrations in `alembic/versions/`. DSN injected from `Config/db.json` in `alembic/env.py`. Current head: `h9c0d1e2f3a4`.
+- **Config: sensitive fields in `.env`**, non-sensitive in `Config/*.json`. `Config/config.py` loads `.env` via `python-dotenv` at import time. Priority: env var > JSON. JSON files have empty-string placeholders for sensitive values. Changing config files requires process restart.
+- **Alembic** migrations in `alembic/versions/`. DSN injected from `.env` / `Config/db.json` in `alembic/env.py`. Current head: `h9c0d1e2f3a4`.
 - **15 ORM models** in `Services/App/models/`. API contract: `{success, data, error}` via `schemas/common.py`.
 - **SSE** is the only progress channel (no polling fallback). Client uses fetch+ReadableStream (not EventSource, to carry auth header).
 - **ThreadPoolExecutor(4)** runs crawl/brief tasks. Task manager pushes events to Redis for SSE replay.
@@ -40,8 +40,8 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 ## Gotchas
 
-- **No env vars at runtime.** `Config/*.json` are the sole config source. `.env.example` is documentation only.
-- **`lru_cache` on config loaders.** Modified JSON files require restart to take effect.
+- **Sensitive fields in `.env`.** `Config/*.json` have empty-string placeholders for sensitive values. `.env` (loaded via `python-dotenv`) provides actual values. Priority: env var > JSON. `.env.example` is the template — copy to `.env` and fill in.
+- **`lru_cache` on config loaders.** Modified `.env` or JSON files require restart to take effect.
 - **`buglist.md` is untracked.** Do not commit or push it.
 - **`CONTEXT.md`, `DEPENDENCIES.md`, `GAP_ANALYSIS.md`** are gitignored session-memory files. Do not commit.
 - **History routes need SPA fallback.** If adding frontend routes, they must work with `Client/index.html` as catch-all. Unknown `/api/*` must remain 404.
@@ -90,8 +90,5 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 ## Next Planned Work
 
-See `TODO.md` — migrate sensitive fields from `Config/*.json` to `.env`:
-- `Core.json`: proxy.default, auth.jwt_secret, auth.admin_username, auth.admin_password
-- `db.json`: postgres.dsn, redis.password
-- `LLM.json`: base_url, api_key, model_id
-- Requires changes in `config.py`, `security.py`, `db.py`, `alembic/env.py`, `sync.py`, `admin_settings.py`
+See `TODO.md` — sensitive fields migration to `.env` has been completed. Remaining work:
+-轮换已暴露在 Git 历史中的凭证 (DB password, JWT secret, admin password, LLM API key)

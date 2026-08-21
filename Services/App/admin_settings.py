@@ -2,16 +2,14 @@
 """管理面板设置读写: 注册开关 / 非管理员可见选项卡 / LLM 配置同步。"""
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from Config.config import CONFIG_DIR, llm_config
+from Config.config import llm_config
 from .models import SystemSetting
 
 logger = logging.getLogger(__name__)
@@ -80,10 +78,6 @@ def current_llm_fields() -> Dict[str, str]:
     }
 
 
-def _llm_file_path() -> Path:
-    return CONFIG_DIR / "LLM.json"
-
-
 def _probe_once(base_url: str, api_key: str, model_id: str, timeout: float = 15.0) -> None:
     url = f"{base_url.rstrip('/')}/chat/completions"
     try:
@@ -121,32 +115,38 @@ def probe_llm(base_url: str, api_key: str, model_id: str) -> None:
 
 
 def write_llm_fields(session: Session, *, base_url: str, api_key: str, model_id: str) -> Dict[str, str]:
-    """连通性检查通过后, 同时写 LLM.json 与 PG system_settings。"""
-    path = _llm_file_path()
-    cfg = json.loads(path.read_text(encoding="utf-8"))
-    cfg["base_url"] = base_url
-    cfg["api_key"] = api_key
-    cfg["model_id"] = model_id
-    path.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    """连通性检查通过后, 写入 PG system_settings (JSON 占位不再写入)。"""
+    cfg = {
+        "base_url": base_url,
+        "api_key": api_key,
+        "model_id": model_id,
+        "timeout_s": 600,
+        "concurrency": 4,
+        "quarantine_consecutive": 3,
+        "retry": {"attempts": 3, "backoff_s": [1, 2, 4]},
+        "operators": {
+            "classify": {"max_batch": 20, "categories": ["政治", "经济", "文化", "科技"]},
+            "summarize": {"max_tokens": 300},
+            "translate_title": {"fallback_translator": True},
+            "compose_overview": {"max_tokens": 800},
+        },
+    }
     _set_setting(
         session,
         _LLM_KEY,
         cfg,
-        "LLM 配置 (OpenAI V1 统一接口), 来源 Config/LLM.json",
+        "LLM 配置 (OpenAI V1 统一接口), 来源管理面板",
     )
     llm_config.cache_clear()
     try:
         from Report.llm import get_llm_provider
-
         get_llm_provider.cache_clear()
     except Exception:
         logger.warning("无法清理 LLM provider 缓存", exc_info=True)
     return {
-        "base_url": cfg["base_url"],
-        "api_key": cfg["api_key"],
-        "model_id": cfg["model_id"],
+        "base_url": base_url,
+        "api_key": api_key,
+        "model_id": model_id,
     }
 
 
