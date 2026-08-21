@@ -137,6 +137,12 @@ def write_llm_fields(session: Session, *, base_url: str, api_key: str, model_id:
         "LLM 配置 (OpenAI V1 统一接口), 来源 Config/LLM.json",
     )
     llm_config.cache_clear()
+    try:
+        from Report.llm import get_llm_provider
+
+        get_llm_provider.cache_clear()
+    except Exception:
+        logger.warning("无法清理 LLM provider 缓存", exc_info=True)
     return {
         "base_url": cfg["base_url"],
         "api_key": cfg["api_key"],

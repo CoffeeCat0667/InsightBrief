@@ -17,7 +17,7 @@
 
 依赖:
 - requests (_http_get_text 请求)
-- Config.config (代理/超时/UA, 直连失败经 CRAWL_PROXY 代理重试一次)
+- Config.config (代理/超时/UA, 直连失败经 Core.json proxy 重试一次)
 - Services.App.db (构建源注册表时按需连接)
 
 用法:

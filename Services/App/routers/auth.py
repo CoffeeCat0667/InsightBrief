@@ -2,8 +2,6 @@
 """鉴权端点: 注册/登录/当前用户。"""
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
@@ -33,6 +31,7 @@ from ..security import (
     verify_password,
 )
 from ..login_rate_limit import login_rate_limiter
+from ..security import JWT_EXPIRE_SECONDS
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -179,7 +178,7 @@ def login(
         TokenResponse(
             access_token=token,
             token_type="bearer",
-            expires_in=int(os.environ.get("JWT_EXPIRE_SECONDS", "86400")),
+            expires_in=JWT_EXPIRE_SECONDS,
             user=UserRead.model_validate(user),
             visible_tabs=visible_tabs,
         )

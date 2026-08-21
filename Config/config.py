@@ -1,33 +1,16 @@
 # -*- coding: utf-8 -*-
-"""统一配置加载: Config/*.json -> dict, 环境变量覆盖 + 必填校验。
+"""统一配置加载: Config/*.json -> dict, JSON 唯一来源 + 必填校验。
 
-与后端 backend/config.py 对齐: 配置文件为唯一事实来源, 环境变量覆盖
-既有默认行为 (如 CRAWL_PROXY 覆盖代理地址, 设为空串则禁用代理)。
+与后端配置对齐: 配置文件为唯一事实来源。所有运行参数和凭证均从 JSON 读取，后续可再迁移到 `.env` 或 secrets。
 """
 from __future__ import annotations
 
 import json
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 CONFIG_DIR = Path(__file__).resolve().parent
-
-_CORE_ENV_PATHS = {
-    ("proxy", "default"): "CRAWL_PROXY",
-    ("auth", "login_rate_limit", "max_attempts"): "AUTH_LOGIN_MAX_ATTEMPTS",
-    ("auth", "login_rate_limit", "window_seconds"): "AUTH_LOGIN_WINDOW_SECONDS",
-}
-
-_DB_ENV_PATHS = {
-    ("postgres", "dsn"): "DB_DSN",
-    ("redis", "host"): "REDIS_HOST",
-    ("redis", "port"): "REDIS_PORT",
-    ("redis", "db"): "REDIS_DB",
-    ("redis", "password"): "REDIS_PASSWORD",
-}
-
 
 class ConfigError(ValueError):
     """配置文件缺失/非法/缺必填键时抛出。"""
@@ -44,21 +27,6 @@ def _load(name: str) -> Dict[str, Any]:
         raise ConfigError(f"配置文件解析失败: {path}: {exc}") from exc
 
 
-def _apply_env(
-    data: Dict[str, Any],
-    env_paths: Mapping[tuple[str, ...], str],
-) -> Dict[str, Any]:
-    """按点路径将环境变量值覆盖到配置字典 (未设置则保留文件值)。"""
-    for keys, env_var in env_paths.items():
-        if env_var not in os.environ:
-            continue
-        node = data
-        for key in keys[:-1]:
-            node = node.setdefault(key, {})
-        node[keys[-1]] = os.environ[env_var].strip()
-    return data
-
-
 def _require(data: Dict[str, Any], path: str, name: str) -> None:
     """校验必填键存在且非空, 缺失抛 ConfigError。"""
     node = data
@@ -70,36 +38,39 @@ def _require(data: Dict[str, Any], path: str, name: str) -> None:
 
 @lru_cache(maxsize=None)
 def core_config() -> Dict[str, Any]:
-    """Core.json: 代理/UA/超时重试/路径/playwright/generic 阈值。"""
-    data = _apply_env(_load("Core"), _CORE_ENV_PATHS)
-    trusted_proxy_ips = os.environ.get("TRUSTED_PROXY_IPS")
-    if trusted_proxy_ips is not None:
-        data.setdefault("auth", {})["trusted_proxy_ips"] = [
-            ip.strip() for ip in trusted_proxy_ips.split(",") if ip.strip()
-        ]
+    """Core.json: 非秘密运行配置与 JSON 内置鉴权/网页配置。"""
+    data = _load("Core")
     for key in (
-        "proxy.default",
         "user_agent",
         "fetch.attempts",
         "paths.save_dir",
+        "proxy.default",
+        "auth.jwt_secret",
+        "auth.jwt_expire_seconds",
+        "auth.admin_username",
+        "auth.admin_password",
         "auth.login_rate_limit.max_attempts",
         "auth.login_rate_limit.window_seconds",
         "auth.trusted_proxy_ips",
+        "web.disable_docs",
     ):
         _require(data, key, "Core.json")
     try:
         limit = int(data["auth"]["login_rate_limit"]["max_attempts"])
         window = int(data["auth"]["login_rate_limit"]["window_seconds"])
+        expire = int(data["auth"]["jwt_expire_seconds"])
     except (TypeError, ValueError, KeyError) as exc:
-        raise ConfigError("Core.json auth.login_rate_limit 必须为整数") from exc
-    if limit < 1 or window < 1:
-        raise ConfigError("Core.json auth.login_rate_limit 必须为正整数")
+        raise ConfigError("Core.json auth 配置必须为整数") from exc
+    if limit < 1 or window < 1 or expire < 1:
+        raise ConfigError("Core.json auth 配置必须为正整数")
     if not isinstance(data["auth"]["trusted_proxy_ips"], list):
         raise ConfigError("Core.json auth.trusted_proxy_ips 必须为列表")
     data["auth"]["login_rate_limit"] = {
         "max_attempts": limit,
         "window_seconds": window,
     }
+    data["auth"]["jwt_expire_seconds"] = expire
+    data["web"]["disable_docs"] = bool(data["web"]["disable_docs"])
     return data
 
 
@@ -131,7 +102,7 @@ def services_config() -> Dict[str, Any]:
 
 
 def get_proxy_config() -> Optional[Mapping[str, str]]:
-    """统一代理入口: CRAWL_PROXY 覆盖 Core.json, 空串禁用代理 (None)。"""
+    """统一代理入口: Core.json 为空字符串时禁用代理 (None)。"""
     proxy = core_config()["proxy"]["default"].strip()
     if not proxy:
         return None
@@ -140,12 +111,14 @@ def get_proxy_config() -> Optional[Mapping[str, str]]:
 
 @lru_cache(maxsize=None)
 def db_config() -> Dict[str, Any]:
-    """db.json: PostgreSQL / Redis 连接配置, 支持 DB_DSN/REDIS_* 环境变量覆盖。"""
-    data = _apply_env(_load("db"), _DB_ENV_PATHS)
+    """db.json: PostgreSQL / Redis 连接配置，JSON 为唯一来源。"""
+    data = _load("db")
     _require(data, "postgres.dsn", "db.json")
     _require(data, "postgres.pool_size", "db.json")
     _require(data, "postgres.max_overflow", "db.json")
     _require(data, "redis.host", "db.json")
+    _require(data, "redis.port", "db.json")
+    _require(data, "redis.db", "db.json")
     return data
 
 

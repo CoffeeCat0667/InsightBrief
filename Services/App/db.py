@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""数据库引擎与会话管理 (DSN 来自 Config/db.json, 可被 DB_DSN 环境变量覆盖)。
+"""数据库引擎与会话管理 (DSN 唯一来自 Config/db.json)。
 
 注意: 密码中的 @ 在 DSN 中须 percent-encode 为 %40 (见 Config/db.json)。
 """

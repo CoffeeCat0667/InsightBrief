@@ -21,6 +21,7 @@ from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .db import SessionLocal
 from .admin_settings import sync_registration_default
+from Config.config import core_config
 from .routers import admin, articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
@@ -61,8 +62,8 @@ async def lifespan(app: FastAPI):
     manager.shutdown()
 
 
-# 生产环境用 IB_DISABLE_DOCS=1 关闭交互文档 (仅暴露业务 API)
-_docs_enabled = os.environ.get("IB_DISABLE_DOCS", "").lower() not in {"1", "true", "yes"}
+# 生产环境用 Config/Core.json web.disable_docs=false/true 控制交互文档
+_docs_enabled = not core_config()["web"]["disable_docs"]
 
 app = FastAPI(
     title="InsightBrief API",

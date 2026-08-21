@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 """登录鉴权: bcrypt 密码哈希 + JWT(HS256) 签发/校验 + FastAPI 依赖。
 
-- SECRET: JWT_SECRET 环境变量 (生产必配); 未配置时随机生成 (重启失效, 仅开发)。
+- SECRET / 初始管理员配置统一来自 Config/Core.json。
 - get_current_user: OAuth2PasswordBearer 解析 Bearer Token -> users 表校验。
 - require_admin: 非 admin 角色抛 403。
 """
 from __future__ import annotations
 
 import logging
-import os
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -23,23 +21,21 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Role, User
 from .schemas import ErrorCode
+from Config.config import core_config
 
 logger = logging.getLogger(__name__)
 
-JWT_SECRET: str = os.environ.get("JWT_SECRET") or ""
-if not JWT_SECRET:
-    JWT_SECRET = secrets.token_hex(32)
-    logger.warning("JWT_SECRET 未配置, 使用随机密钥 (进程重启后所有 Token 失效; 生产环境请设置 JWT_SECRET)")
-
+JWT_SECRET: str = core_config()["auth"]["jwt_secret"]
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", "86400"))
+JWT_EXPIRE_SECONDS = int(core_config()["auth"]["jwt_expire_seconds"])
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/auth/login", auto_error=False
 )
 
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+_auth_config = core_config()["auth"]
+ADMIN_USERNAME = str(_auth_config["admin_username"])
+ADMIN_PASSWORD = str(_auth_config["admin_password"])
 BCRYPT_MAX_PASSWORD_BYTES = 72
 # 仅用于不存在用户的恒时验证; 不是可登录账户的密码哈希。
 _DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"InsightBrief login timing dummy", bcrypt.gensalt())
@@ -164,7 +160,7 @@ def seed_admin(session: Session) -> None:
         return
     if not ADMIN_PASSWORD:
         raise RuntimeError(
-            "未配置 ADMIN_PASSWORD, 拒绝创建初始管理员; 请设置强密码后重启服务"
+            "Config/Core.json 未配置 auth.admin_password, 拒绝创建初始管理员"
         )
     admin_role = session.scalar(select(Role).where(Role.code == "admin"))
     session.add(

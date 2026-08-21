@@ -81,7 +81,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 `alembic upgrade head` 当前迁移链包括 0001~0003、平台超时/审计/国内源配额和定时任务迁移，当前版本为 `h9c0d1e2f3a4`。
 
 - 交互 API 文档: http://127.0.0.1:8000/docs
-- 初始管理员: 空库启动时必须设置 `ADMIN_PASSWORD`（可选 `ADMIN_USERNAME`,默认 `admin`）; 未设置时服务拒绝初始化,避免默认凭据风险。生产还必须配置 `JWT_SECRET`。
+- 初始管理员: 空库启动时使用 `Config/Core.json` 中的 `auth.admin_username`/`auth.admin_password`; 若配置缺失服务拒绝初始化,避免默认凭据风险。生产部署请保护该配置文件。
 - CLI 仍可用: `python -m Services.CLI.main` 或 `python Services/CLI/main.py`(菜单输入媒体编号抓取最新一条)
 
 ## API 概览
@@ -116,13 +116,13 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 | 管理面板 | 用户 CRUD、注册开关、LLM probe 双写、非管理员导航权限 |
 ## 配置与密钥
 
-所有配置只从 `Config/config.py` 加载(`Config/*.json` + lru_cache + 必填校验):
+所有配置只从 `Config/config.py` 加载(`Config/*.json` + lru_cache + 必填校验)，Ver0.2.0 起不读取环境变量；后续可再迁移到 `.env` 或 secrets:
 
-- `Config/Core.json`:代理(默认 127.0.0.1:7897,`CRAWL_PROXY` 覆盖,空串禁用)、UA、重试参数(attempts/wait_seconds)、playwright、generic 阈值、登录失败限流与可信反代配置 — **不含任何抓取 timeout(超时已平台化)**
+- `Config/Core.json`:代理、UA、重试、playwright、generic 阈值，以及 JSON 内置 `jwt_secret/admin_username/admin_password/jwt_expire_seconds`、登录限流、可信反代、`web.disable_docs`
 - `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)**
 - `Config/Services.json`:27 源注册表 + platform/link 正则 + translator + domestic_source_ids
-- `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数;`LLM_API_KEY` 环境变量可覆盖 api_key(启动同步生效);管理员可在管理面板先探测连通性后同时写回 JSON 与 PG;api_key 仍按既有决策明文保存,生产部署时再评估密钥方案(DECISIONS §15-9)
-- `Config/db.json`:PG/Redis DSN(`DB_DSN`/`REDIS_*` 覆盖);`.env.example` 为覆盖模板
+- `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数；Ver0.2.0 不接受 `LLM_API_KEY` 覆盖；管理员可在管理面板先探测连通性后同时写回 JSON 与 PG；api_key 仍按既有决策明文保存,生产部署时再评估密钥方案(DECISIONS §15-9)
+- `Config/db.json`:PG/Redis DSN、host/port/db/password，JSON 为唯一来源；`.env.example` 仅保留迁移提示
 
 ### 管理面板与权限
 
@@ -164,7 +164,7 @@ location /api/ {
 }
 ```
 
-反代时把 Nginx 的地址加入 `TRUSTED_PROXY_IPS`，审计日志才会采信 `X-Forwarded-For` 的首个地址。
+反代时把 Nginx 的地址加入 `Config/Core.json` 的 `auth.trusted_proxy_ips`，审计日志才会采信 `X-Forwarded-For` 的首个地址。
 
 ## 新增媒体源
 
