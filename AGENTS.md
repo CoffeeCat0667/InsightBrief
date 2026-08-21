@@ -29,7 +29,7 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 - **FastAPI** entry: `Services/App/main.py`. Lifespan bootstraps DB, syncs config→DB, seeds roles/admin, starts schedule thread.
 - **SPA frontend**: `Client/` — vanilla HTML/CSS/JS, zero build. FastAPI serves static files with SPA fallback for History routes. URLs have no `#`.
-- **Config: sensitive fields in `.env`**, non-sensitive in `Config/*.json`. `Config/config.py` loads `.env` via `python-dotenv` at import time. Priority: env var > JSON. JSON files have empty-string placeholders for sensitive values. Changing config files requires process restart.
+- **Config: sensitive fields in `.env`**, non-sensitive in `Config/*.json`. `Config/config.py` loads `.env` via `python-dotenv` at import time. JSON files do NOT contain sensitive values. Changing config files requires process restart.
 - **Alembic** migrations in `alembic/versions/`. DSN injected from `.env` / `Config/db.json` in `alembic/env.py`. Current head: `h9c0d1e2f3a4`.
 - **15 ORM models** in `Services/App/models/`. API contract: `{success, data, error}` via `schemas/common.py`.
 - **SSE** is the only progress channel (no polling fallback). Client uses fetch+ReadableStream (not EventSource, to carry auth header).
@@ -40,12 +40,12 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 ## Gotchas
 
-- **Sensitive fields in `.env`.** `Config/*.json` have empty-string placeholders for sensitive values. `.env` (loaded via `python-dotenv`) provides actual values. Priority: env var > JSON. `.env.example` is the template — copy to `.env` and fill in.
+- **Sensitive fields in `.env`.** `Config/*.json` do NOT contain sensitive values. `.env` (loaded via `python-dotenv`) provides JWT secret, admin credentials, DB DSN, Redis password, and LLM credentials. `.env.example` is the template — copy to `.env` and fill in.
 - **`lru_cache` on config loaders.** Modified `.env` or JSON files require restart to take effect.
 - **`buglist.md` is untracked.** Do not commit or push it.
 - **`CONTEXT.md`, `DEPENDENCIES.md`, `GAP_ANALYSIS.md`** are gitignored session-memory files. Do not commit.
 - **History routes need SPA fallback.** If adding frontend routes, they must work with `Client/index.html` as catch-all. Unknown `/api/*` must remain 404.
-- **LLM `api_key` stored plaintext** in `Config/LLM.json` and `system_settings` DB. Manager probe writes both JSON+PG on success only. api_key never written to audit logs.
+- **LLM `api_key` stored plaintext** in `.env` and `system_settings` DB. Manager probe writes PG on success only. api_key never written to audit logs.
 - **`domestic_max_ratio`**: 0–100, 100 = no limit. Foreign sources crawled first; domestic quota = `floor(F*R/(100-R))`.
 - **Crawl task idempotency**: overlapping source sets with a running task → 409.
 - **Auto brief**: only `inserted` (new) articles from the current crawl. No brief on empty/failed/cancelled crawl.
@@ -82,11 +82,12 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 
 | File | Purpose |
 |---|---|
-| `Config/Core.json` | Proxy, UA, retry, Playwright, JWT secret, admin credentials, rate limit, trusted proxies, docs toggle |
+| `Config/Core.json` | UA, retry, Playwright, rate limit, trusted proxies, docs toggle |
 | `Config/Clawer.json` | Per-platform base_url, xpaths, UA, fetch_strategy, `fetch_timeout` |
 | `Config/Services.json` | 27 source registry, platform link patterns, translator settings, `domestic_source_ids` |
-| `Config/LLM.json` | base_url, api_key, model_id, timeout, retry, operator params |
-| `Config/db.json` | PostgreSQL DSN + pool, Redis host/port/db |
+| `Config/LLM.json` | timeout, retry, operator params |
+| `Config/db.json` | pool_size, max_overflow, Redis host/port/db |
+| `.env` | All sensitive fields: JWT secret, admin creds, DB DSN, Redis password, LLM base_url/api_key/model_id |
 
 ## Next Planned Work
 

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""统一配置加载: Config/*.json + .env -> dict, 必填校验。
+"""统一配置加载: Config/*.json (非敏感) + .env (敏感) -> dict, 必填校验。
 
 敏感字段 (JWT secret、管理员凭据、数据库 DSN、Redis 密码、LLM 凭证)
-优先从环境变量 / .env 读取; JSON 中对应值留空字符串作为占位。
-非敏感字段仍从 JSON 读取。优先级: 环境变量 > JSON 值。
+仅从 .env 读取 (python-dotenv 加载到 os.environ); JSON 不含敏感值。
 """
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ try:
     from dotenv import load_dotenv as _load_dotenv
     _load_dotenv(_PROJECT_ROOT / ".env", override=False)
 except ImportError:
-    pass  # python-dotenv 未安装时退化为纯环境变量模式
+    pass
 
 
 class ConfigError(ValueError):
@@ -47,38 +46,27 @@ def _require(data: Dict[str, Any], path: str, name: str) -> None:
             raise ConfigError(f"{name} 缺少必填配置: {path}")
         node = node[key]
     if node == "":
-        raise ConfigError(f"{name} 配置值为空 (请在 .env 或 JSON 中提供): {path}")
+        raise ConfigError(f"{name} 配置值为空: {path}")
 
 
-def _env(name: str, default: Any = None) -> Optional[str]:
-    """读取环境变量; 值为空字符串时视为未设置 (返回 default)。"""
+def _env_required(name: str) -> str:
+    """从环境变量读取必填敏感字段; 缺失或空则抛 ConfigError。"""
     val = os.environ.get(name, "")
-    return val if val else default
+    if not val:
+        raise ConfigError(f"敏感字段未配置 (请在 .env 中设置 {name})")
+    return val
 
 
 @lru_cache(maxsize=None)
 def core_config() -> Dict[str, Any]:
-    """Core.json + .env 覆盖: 敏感字段优先从环境变量读取。
+    """Core.json (非敏感) + .env (敏感) 合并配置。
 
-    环境变量:
-      IB_PROXY_DEFAULT, IB_JWT_SECRET, IB_JWT_EXPIRE_SECONDS,
-      IB_ADMIN_USERNAME, IB_ADMIN_PASSWORD
+    .env 敏感字段: IB_PROXY_DEFAULT, IB_JWT_SECRET, IB_JWT_EXPIRE_SECONDS,
+                    IB_ADMIN_USERNAME, IB_ADMIN_PASSWORD
     """
     data = _load("Core")
 
-    # ── 敏感字段: 环境变量 > JSON 值 ──
-    if (v := _env("IB_PROXY_DEFAULT")) is not None:
-        data["proxy"]["default"] = v
-    if (v := _env("IB_JWT_SECRET")) is not None:
-        data["auth"]["jwt_secret"] = v
-    if (v := _env("IB_JWT_EXPIRE_SECONDS")) is not None:
-        data["auth"]["jwt_expire_seconds"] = int(v)
-    if (v := _env("IB_ADMIN_USERNAME")) is not None:
-        data["auth"]["admin_username"] = v
-    if (v := _env("IB_ADMIN_PASSWORD")) is not None:
-        data["auth"]["admin_password"] = v
-
-    # ── 必填校验 (非敏感) ──
+    # ── 非敏感字段必填校验 ──
     for key in (
         "user_agent",
         "fetch.attempts",
@@ -90,14 +78,17 @@ def core_config() -> Dict[str, Any]:
     ):
         _require(data, key, "Core.json")
 
-    # ── 敏感字段必填校验 (env 或 JSON 至少一个有值) ──
-    for key in ("proxy.default", "auth.jwt_secret", "auth.admin_username", "auth.admin_password"):
-        _require(data, key, "Core.json/环境变量")
+    # ── 敏感字段: 仅从 .env 读取 ──
+    data["proxy"] = {"default": _env_required("IB_PROXY_DEFAULT")}
+    data["auth"]["jwt_secret"] = _env_required("IB_JWT_SECRET")
+    data["auth"]["admin_username"] = _env_required("IB_ADMIN_USERNAME")
+    data["auth"]["admin_password"] = _env_required("IB_ADMIN_PASSWORD")
 
     try:
         limit = int(data["auth"]["login_rate_limit"]["max_attempts"])
         window = int(data["auth"]["login_rate_limit"]["window_seconds"])
-        expire = int(data["auth"]["jwt_expire_seconds"])
+        expire_str = os.environ.get("IB_JWT_EXPIRE_SECONDS", "")
+        expire = int(expire_str) if expire_str else int(data["auth"]["jwt_expire_seconds"])
     except (TypeError, ValueError, KeyError) as exc:
         raise ConfigError("Core.json auth 配置必须为整数") from exc
     if limit < 1 or window < 1 or expire < 1:
@@ -141,7 +132,7 @@ def services_config() -> Dict[str, Any]:
 
 
 def get_proxy_config() -> Optional[Mapping[str, str]]:
-    """统一代理入口: Core.json 为空字符串时禁用代理 (None)。"""
+    """统一代理入口: 空字符串时禁用代理 (None)。"""
     proxy = core_config()["proxy"]["default"].strip()
     if not proxy:
         return None
@@ -150,20 +141,19 @@ def get_proxy_config() -> Optional[Mapping[str, str]]:
 
 @lru_cache(maxsize=None)
 def db_config() -> Dict[str, Any]:
-    """db.json + .env 覆盖: DSN 和 Redis 密码优先从环境变量读取。
+    """db.json (非敏感) + .env (敏感) 合并配置。
 
-    环境变量: IB_POSTGRES_DSN, IB_REDIS_PASSWORD
+    .env 敏感字段: IB_POSTGRES_DSN, IB_REDIS_PASSWORD
     """
     data = _load("db")
 
-    # ── 敏感字段: 环境变量 > JSON 值 ──
-    if (v := _env("IB_POSTGRES_DSN")) is not None:
-        data["postgres"]["dsn"] = v
-    if (v := _env("IB_REDIS_PASSWORD")) is not None:
-        data["redis"]["password"] = v
+    # ── 敏感字段: 仅从 .env 读取 ──
+    data["postgres"]["dsn"] = _env_required("IB_POSTGRES_DSN")
+    redis_password = os.environ.get("IB_REDIS_PASSWORD", "")
+    if redis_password:
+        data["redis"]["password"] = redis_password
 
     # ── 必填校验 ──
-    _require(data, "postgres.dsn", "db.json/环境变量")
     _require(data, "postgres.pool_size", "db.json")
     _require(data, "postgres.max_overflow", "db.json")
     _require(data, "redis.host", "db.json")
@@ -174,31 +164,25 @@ def db_config() -> Dict[str, Any]:
 
 @lru_cache(maxsize=None)
 def llm_config() -> Dict[str, Any]:
-    """LLM.json + .env 覆盖: base_url/api_key/model_id 优先从环境变量读取。
+    """LLM.json (非敏感) + .env (敏感) 合并配置。
 
-    环境变量: IB_LLM_BASE_URL, IB_LLM_API_KEY, IB_LLM_MODEL_ID
+    .env 敏感字段: IB_LLM_BASE_URL, IB_LLM_API_KEY, IB_LLM_MODEL_ID
 
     仅由 sync.py 读取注入 PG (system_settings key="llm"); 应用实现一律
     只读 PG, 不直接读此文件。
     """
     data = _load("LLM")
 
-    # ── 敏感字段: 环境变量 > JSON 值 ──
-    if (v := _env("IB_LLM_BASE_URL")) is not None:
-        data["base_url"] = v
-    if (v := _env("IB_LLM_API_KEY")) is not None:
-        data["api_key"] = v
-    if (v := _env("IB_LLM_MODEL_ID")) is not None:
-        data["model_id"] = v
+    # ── 敏感字段: 仅从 .env 读取 ──
+    data["base_url"] = _env_required("IB_LLM_BASE_URL")
+    data["api_key"] = _env_required("IB_LLM_API_KEY")
+    data["model_id"] = _env_required("IB_LLM_MODEL_ID")
 
-    # ── 必填校验 ──
+    # ── 必填校验 (非敏感) ──
     for key in (
-        "base_url",
-        "api_key",
-        "model_id",
         "timeout_s",
         "retry.attempts",
         "operators.classify.categories",
     ):
-        _require(data, key, "LLM.json/环境变量")
+        _require(data, key, "LLM.json")
     return data

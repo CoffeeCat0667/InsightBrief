@@ -1,7 +1,4 @@
 {
-  "base_url": "",
-  "api_key": "",
-  "model_id": "",
   "timeout_s": 600,
   "concurrency": 4,
   "quarantine_consecutive": 3,

@@ -1,7 +1,4 @@
 {
-  "proxy": {
-    "default": ""
-  },
   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "fetch": {
     "attempts": 3,
@@ -32,10 +29,7 @@
       "window_seconds": 300
     },
     "trusted_proxy_ips": [],
-    "jwt_secret": "",
-    "jwt_expire_seconds": 86400,
-    "admin_username": "",
-    "admin_password": ""
+    "jwt_expire_seconds": 86400
   },
   "web": {
     "disable_docs": false
