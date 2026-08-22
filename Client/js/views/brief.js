@@ -178,8 +178,14 @@ export async function briefTasksView(root) {
           <input class="input" type="datetime-local" id="b-start"></div>
         <div class="field"><label class="label">文章时间窗止(可选)</label>
           <input class="input" type="datetime-local" id="b-end"></div>
-        <div class="field" style="max-width:160px"><label class="label">最大文章数</label>
+        <div class="field" style="max-width:160px" id="b-max-wrap"><label class="label">最大文章数</label>
           <input class="input" type="number" id="b-max" min="1" max="500" placeholder="默认 20"></div>
+        <div class="field" style="display:flex;align-items:center;gap:10px;padding-top:22px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:13.5px">
+            <input type="checkbox" id="b-all-pending" style="width:16px;height:16px;cursor:pointer">
+            生成所有未简报文章
+          </label>
+        </div>
         <div class="field" style="align-self:flex-end">
           <button class="btn lg" id="b-start-btn">开始生成</button>
         </div>
@@ -187,6 +193,40 @@ export async function briefTasksView(root) {
     </div>
 
     <div id="b-live" class="card hidden" style="margin-bottom:16px"></div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;cursor:pointer" id="bstats-toggle">
+        <span style="font-weight:600;font-size:14px">📊 统计信息</span>
+        <span style="color:var(--text-3);font-size:12px" id="bstats-arrow">▸ 展开</span>
+      </div>
+      <div id="bstats-box" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div class="chips" id="bstats-mode" style="margin-bottom:12px">
+          <button class="chip active" data-mode="overview">概览</button>
+          <button class="chip" data-mode="by-day">按天统计</button>
+          <button class="chip" data-mode="by-source">按源统计</button>
+        </div>
+        <div id="bstats-overview"></div>
+        <div id="bstats-by-day" style="display:none">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <input type="date" class="input" id="bstats-day" style="width:160px">
+            <button class="btn primary sm" id="bstats-day-btn">查询</button>
+          </div>
+          <div id="bstats-day-result"></div>
+        </div>
+        <div id="bstats-by-source" style="display:none">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <input class="input" id="bstats-src-name" placeholder="新闻源名称 (如 BBC News)" style="min-width:200px">
+            <select class="select" id="bstats-days">
+              <option value="7">近 7 天</option>
+              <option value="30" selected>近 30 天</option>
+              <option value="90">近 90 天</option>
+            </select>
+            <button class="btn primary sm" id="bstats-src-btn">查询</button>
+          </div>
+          <div id="bstats-src-result"></div>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -228,6 +268,114 @@ export async function briefTasksView(root) {
       })
     );
 
+  /* ── all_pending 开关 ── */
+  const allPendingCb = root.querySelector("#b-all-pending");
+  const maxWrap = root.querySelector("#b-max-wrap");
+  allPendingCb.addEventListener("change", () => {
+    maxWrap.style.opacity = allPendingCb.checked ? "0.4" : "1";
+    maxWrap.style.pointerEvents = allPendingCb.checked ? "none" : "";
+    root.querySelector("#b-max").disabled = allPendingCb.checked;
+  });
+
+  /* ── 统计信息 ── */
+  const bstatsOverview = root.querySelector("#bstats-overview");
+  const bstatsDayResult = root.querySelector("#bstats-day-result");
+  const bstatsSrcResult = root.querySelector("#bstats-src-result");
+
+  root.querySelector("#bstats-toggle").addEventListener("click", () => {
+    const box = root.querySelector("#bstats-box");
+    const arrow = root.querySelector("#bstats-arrow");
+    if (box.style.display === "none") {
+      box.style.display = "";
+      arrow.textContent = "▾ 收起";
+      if (!bstatsOverview.dataset.loaded) loadOverview();
+    } else {
+      box.style.display = "none";
+      arrow.textContent = "▸ 展开";
+    }
+  });
+
+  root.querySelectorAll("#bstats-mode .chip").forEach((c) =>
+    c.addEventListener("click", () => {
+      root.querySelectorAll("#bstats-mode .chip").forEach((x) => x.classList.remove("active"));
+      c.classList.add("active");
+      root.querySelector("#bstats-overview").style.display = c.dataset.mode === "overview" ? "" : "none";
+      root.querySelector("#bstats-by-day").style.display = c.dataset.mode === "by-day" ? "" : "none";
+      root.querySelector("#bstats-by-source").style.display = c.dataset.mode === "by-source" ? "" : "none";
+    })
+  );
+
+  async function loadOverview() {
+    bstatsOverview.innerHTML = `<div class="skeleton" style="height:60px"></div>`;
+    try {
+      const data = await api.get("/api/briefs/stats-overview");
+      bstatsOverview.dataset.loaded = "1";
+      const catParts = Object.entries(data.by_category).map(
+        ([k, v]) => `${CATEGORY_LABELS[k] || k}: ${v}`
+      );
+      const srcLines = data.by_source.slice(0, 15).map(
+        (r) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="width:140px;font-size:13px;text-align:right;color:var(--text-3)">${esc(r.source_name)}</span>
+          <div style="flex:1;height:16px;background:var(--bg-2);border-radius:4px;overflow:hidden">
+            <div style="width:${data.by_source[0] ? (r.count / data.by_source[0].count * 100).toFixed(1) : 0}%;height:100%;background:var(--accent);border-radius:4px"></div>
+          </div>
+          <span style="width:40px;font-size:13px;font-weight:600">${r.count}</span>
+        </div>`
+      ).join("");
+      bstatsOverview.innerHTML = `
+        <div style="font-size:13.5px;color:var(--text-2);margin-bottom:10px">全部简报: <b>${data.total}</b> 份 · 分类: ${catParts.join(" / ")}</div>
+        ${srcLines ? `<div style="font-size:13px;font-weight:600;margin-bottom:6px">Top 来源</div>${srcLines}` : ""}`;
+    } catch (e) {
+      bstatsOverview.innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`;
+    }
+  }
+
+  root.querySelector("#bstats-day-btn").addEventListener("click", async () => {
+    const day = root.querySelector("#bstats-day").value;
+    if (!day) { toastErr("请选择日期"); return; }
+    bstatsDayResult.innerHTML = `<div class="skeleton" style="height:40px"></div>`;
+    try {
+      const data = await api.get("/api/brief-tasks/stats-by-day", { day });
+      if (!data.length) { bstatsDayResult.innerHTML = `<div class="empty-hint">${esc(day)} 暂无数据</div>`; return; }
+      const total = data.reduce((s, r) => s + r.count, 0);
+      const maxCount = data[0].count;
+      bstatsDayResult.innerHTML = `
+        <div style="margin-bottom:6px;color:var(--text-2);font-size:13px">${esc(day)} 共 <b>${total}</b> 份，<b>${data.length}</b> 个来源</div>
+        ${data.map((r) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:140px;font-size:13px;text-align:right;color:var(--text-3)">${esc(r.source_name)}</span>
+            <div style="flex:1;height:18px;background:var(--bg-2);border-radius:4px;overflow:hidden">
+              <div style="width:${(r.count / maxCount * 100).toFixed(1)}%;height:100%;background:var(--accent);border-radius:4px"></div>
+            </div>
+            <span style="width:40px;font-size:13px;font-weight:600">${r.count}</span>
+          </div>`).join("")}`;
+    } catch (e) { bstatsDayResult.innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`; }
+  });
+
+  root.querySelector("#bstats-src-btn").addEventListener("click", async () => {
+    const srcName = root.querySelector("#bstats-src-name").value.trim();
+    const days = root.querySelector("#bstats-days").value;
+    if (!srcName) { toastErr("请输入新闻源名称"); return; }
+    bstatsSrcResult.innerHTML = `<div class="skeleton" style="height:40px"></div>`;
+    try {
+      const data = await api.get("/api/brief-tasks/stats-by-source", { source_name: srcName, days: Number(days) });
+      if (!data.length) { bstatsSrcResult.innerHTML = `<div class="empty-hint">近 ${days} 天暂无数据</div>`; return; }
+      const total = data.reduce((s, r) => s + r.count, 0);
+      const maxCount = Math.max(...data.map((r) => r.count));
+      const avg = (total / data.length).toFixed(1);
+      bstatsSrcResult.innerHTML = `
+        <div style="margin-bottom:6px;color:var(--text-2);font-size:13px">${esc(srcName)} 近 ${days} 天共 <b>${total}</b> 份，日均 <b>${avg}</b> 份</div>
+        ${data.map((r) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:85px;font-size:13px;text-align:right;color:var(--text-3)">${esc(r.day.slice(5))}</span>
+            <div style="flex:1;height:18px;background:var(--bg-2);border-radius:4px;overflow:hidden">
+              <div style="width:${maxCount ? (r.count / maxCount * 100).toFixed(1) : 0}%;height:100%;background:var(--accent);border-radius:4px"></div>
+            </div>
+            <span style="width:40px;font-size:13px;font-weight:600">${r.count}</span>
+          </div>`).join("")}`;
+    } catch (e) { bstatsSrcResult.innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`; }
+  });
+
   // ---- 创建 + SSE ----
   let ac = null;
   async function startBrief() {
@@ -240,6 +388,7 @@ export async function briefTasksView(root) {
     if (end) body.end_time = new Date(end).toISOString();
     const max = Number(root.querySelector("#b-max").value);
     if (max) body.max_items = max;
+    if (allPendingCb.checked) body.all_pending = true;
     if (ac) {
       ac.abort();
       ac = null;

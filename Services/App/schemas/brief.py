@@ -19,6 +19,7 @@ class BriefTaskCreate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     max_items: Optional[int] = Field(default=None, ge=1, le=500)  # 文章上限 (最新优先)
+    all_pending: bool = False  # True = 为所有未生成简报的文章生成简报, 忽略 max_items
 
 
 class BriefTaskRead(BaseModel):

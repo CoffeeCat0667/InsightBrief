@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import Optional
 
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import cast, Date, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
@@ -93,6 +94,76 @@ def create_brief_task(
         ip=client_ip(request),
     )
     return ok(BriefTaskRead.model_validate(task))
+
+
+@router.get("/stats-by-day")
+def brief_stats_by_day(
+    day: str,
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """某一天各新闻源的简报数量。"""
+    stmt = (
+        select(BriefItem.source_name, func.count().label("count"))
+        .join(Brief, BriefItem.brief_id == Brief.id)
+        .where(cast(Brief.created_at, Date) == day)
+        .group_by(BriefItem.source_name)
+        .order_by(func.count().desc())
+    )
+    rows = session.execute(stmt).all()
+    return ok([
+        {"source_name": r.source_name or "未知", "count": r.count}
+        for r in rows
+    ])
+
+
+@router.get("/stats-by-source")
+def brief_stats_by_source(
+    source_name: str,
+    days: int = 30,
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """某新闻源最近 N 天每天的简报数量。"""
+    cutoff = datetime.now() - timedelta(days=days)
+    stmt = (
+        select(cast(Brief.created_at, Date).label("day"), func.count().label("count"))
+        .join(BriefItem, BriefItem.brief_id == Brief.id)
+        .where(BriefItem.source_name == source_name, Brief.created_at >= cutoff)
+        .group_by("day")
+        .order_by("day")
+    )
+    rows = session.execute(stmt).all()
+    return ok([
+        {"day": str(r.day), "count": r.count}
+        for r in rows
+    ])
+
+
+@router.get("/stats-overview")
+def brief_stats_overview(
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """所有简报的概览: 总数 + 各分类数量。"""
+    total = session.scalar(select(func.count()).select_from(Brief)) or 0
+    cat_stmt = (
+        select(Brief.category, func.count().label("count"))
+        .group_by(Brief.category)
+        .order_by(func.count().desc())
+    )
+    rows = session.execute(cat_stmt).all()
+    by_category = {r.category or "uncategorized": r.count for r in rows}
+    # 按源统计
+    src_stmt = (
+        select(BriefItem.source_name, func.count().label("count"))
+        .group_by(BriefItem.source_name)
+        .order_by(func.count().desc())
+        .limit(20)
+    )
+    src_rows = session.execute(src_stmt).all()
+    by_source = [{"source_name": r.source_name or "未知", "count": r.count} for r in src_rows]
+    return ok({"total": total, "by_category": by_category, "by_source": by_source})
 
 
 @router.get("")

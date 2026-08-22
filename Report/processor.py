@@ -19,7 +19,7 @@ from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import not_, select
 
 from .llm import LLMError, get_llm_provider
 from .operators import (
@@ -291,7 +291,7 @@ class BriefProcessor:
     def _load_articles(self, params: Dict[str, Any]) -> List[Any]:
         from sqlalchemy.orm import joinedload
 
-        from Services.App.models import Article, Source
+        from Services.App.models import Article, BriefItem, Source
 
         stmt = (
             select(Article)
@@ -310,9 +310,15 @@ class BriefProcessor:
             stmt = stmt.where(Article.crawled_at >= params["start_time"])
         if params.get("end_time"):
             stmt = stmt.where(Article.crawled_at <= params["end_time"])
+        if params.get("all_pending"):
+            # 排除已有简报条目的文章
+            subq = select(BriefItem.article_id).distinct()
+            stmt = stmt.where(not_(Article.id.in_(subq)))
         stmt = stmt.order_by(Article.crawled_at.desc(), Article.id.desc())
         with _session() as session:
             rows = session.scalars(stmt).unique().all()
+        if params.get("all_pending"):
+            return list(rows)
         limit = int(params.get("max_items") or 0) or 200
         return list(rows[:limit])
 
