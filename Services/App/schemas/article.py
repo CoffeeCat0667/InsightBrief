@@ -57,6 +57,17 @@ class ArticleContenItem(BaseModel):
     desc: Optional[str] = None
 
 
+class ArticleMediaRead(BaseModel):
+    """媒体资源 (图片/视频)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    url: str
+    caption: Optional[str] = None
+
+
 class ArticleDetail(ArticleListItem):
     """文章详情 (含正文/媒体/译文全文)。"""
 
@@ -66,6 +77,7 @@ class ArticleDetail(ArticleListItem):
     author_url: Optional[str] = None
     crawled_at: Optional[datetime] = None
     contents: List[ArticleContenItem] = Field(default_factory=list)
+    media: List[ArticleMediaRead] = Field(default_factory=list)
 
 
 class ArticleSearchParams(BaseModel):

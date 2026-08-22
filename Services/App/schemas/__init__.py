@@ -16,6 +16,7 @@ from .article import (
     ArticleDetail,
     ArticleListParams,
     ArticleListItem,
+    ArticleMediaRead,
     ArticleSearchParams,
     PlatformRead,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "ArticleDetail",
     "ArticleListParams",
     "ArticleListItem",
+    "ArticleMediaRead",
     "ArticleSearchParams",
     "AuditLogRead",
     "BriefItemRead",

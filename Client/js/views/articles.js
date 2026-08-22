@@ -113,10 +113,15 @@ export async function articlesView(root) {
       <h2>${esc("加载中...")}</h2></div>`;
     try {
       const a = await api.get(`/api/articles/${id}`);
-      const contents = (a.contents || []).map((c) =>
-        c.type === "media"
-          ? `<div class="content-block media">📷 ${esc(c.desc || "媒体")}: ${esc(c.content)}</div>`
-          : `<div class="content-block">${esc(c.content)}</div>`).join("");
+      const contents = (a.contents || []).map((c) => {
+        if (c.type === "image") {
+          return `<div class="content-block media"><img src="${esc(c.content)}" alt="${esc(c.desc || "")}" style="max-width:100%;border-radius:6px;margin:6px 0" loading="lazy">${c.desc ? `<div style="color:var(--text-3);font-size:12.5px;margin-top:2px">${esc(c.desc)}</div>` : ""}</div>`;
+        }
+        if (c.type === "video") {
+          return `<div class="content-block media"><video src="${esc(c.content)}" controls style="max-width:100%;border-radius:6px;margin:6px 0"></video></div>`;
+        }
+        return `<div class="content-block">${esc(c.content)}</div>`;
+      }).join("");
       const cnInTitle = /[\u4e00-\u9fff]/.test((a.title || "") + (a.language || ""));
       const isForeign = !cnInTitle;
       overlay.querySelector(".card").innerHTML = `
@@ -148,7 +153,7 @@ export async function articlesView(root) {
         const origTitle = a.translated_title || a.title;
         const origSub = a.translated_title ? a.title : "";
         const origBody = overlay.querySelector("#orig-box").innerHTML;
-        const text = (a.contents || []).filter((c) => c.type !== "media").map((c) => c.content).join("\n\n").trim();
+        const text = (a.contents || []).filter((c) => c.type === "text").map((c) => c.content).join("\n\n").trim();
         let showingCn = false;
         trBtn.addEventListener("click", async () => {
           if (!showingCn) {
