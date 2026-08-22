@@ -34,6 +34,7 @@ from .brief import (
     BriefListParams,
     BriefRead,
     BriefTaskCreate,
+    BriefTaskDetailRead,
     BriefTaskRead,
 )
 from .source import SourceCreate, SourceKind, SourceRead, SourceUpdate
@@ -63,6 +64,7 @@ __all__ = [
     "BriefListParams",
     "BriefRead",
     "BriefTaskCreate",
+    "BriefTaskDetailRead",
     "BriefTaskRead",
     "CrawlRunRead",
     "CrawlRunStatus",

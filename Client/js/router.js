@@ -4,7 +4,7 @@ import { esc } from "./util.js";
 import { authView } from "./views/auth.js";
 import { articlesView } from "./views/articles.js";
 import { crawlView } from "./views/crawl.js";
-import { briefView } from "./views/brief.js";
+import { briefView, briefTasksView } from "./views/brief.js";
 import { sourcesView } from "./views/sources.js";
 import { auditView } from "./views/audit.js";
 import { adminView } from "./views/admin.js";
@@ -14,17 +14,19 @@ const THEME_KEY = "ib_theme"; // auto | light | dark
 const NAV = [
   { hash: "articles", icon: "i-news", label: "文章" },
   { hash: "brief", icon: "i-brief", label: "简报" },
+  { hash: "brief_tasks", icon: "i-task", label: "简报任务" },
   { hash: "crawl", icon: "i-crawl", label: "抓取任务" },
   { hash: "sources", icon: "i-source", label: "新闻源" },
   { hash: "audit", icon: "i-audit", label: "审计日志", admin: true },
 ];
 
-const NAV_KEYS = { articles: "articles", brief: "brief", crawl: "crawl", sources: "sources" };
-const DEFAULT_NON_ADMIN_TABS = ["articles", "brief"];
+const NAV_KEYS = { articles: "articles", brief: "brief", brief_tasks: "brief_tasks", crawl: "crawl", sources: "sources" };
+const DEFAULT_NON_ADMIN_TABS = ["articles", "brief", "brief_tasks"];
 
 const VIEWS = {
   articles: articlesView,
   brief: briefView,
+  brief_tasks: briefTasksView,
   crawl: crawlView,
   sources: sourcesView,
   audit: auditView,

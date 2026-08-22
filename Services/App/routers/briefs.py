@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
 from ...audit_logs import client_ip, write_audit
@@ -23,6 +23,7 @@ from ..schemas import (
     BriefListParams,
     BriefRead,
     BriefTaskCreate,
+    BriefTaskDetailRead,
     BriefTaskRead,
     Page,
     PageParams,
@@ -130,14 +131,18 @@ def get_brief_task(
     session: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """简报任务详情。"""
-    task = session.get(BriefTask, task_id)
+    """简报任务详情（含关联简报列表）。"""
+    task = session.scalar(
+        select(BriefTask)
+        .options(joinedload(BriefTask.briefs).joinedload(Brief.items))
+        .where(BriefTask.id == task_id)
+    )
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": f"简报任务 {task_id} 不存在"},
         )
-    return ok(BriefTaskRead.model_validate(task))
+    return ok(BriefTaskDetailRead.model_validate(task))
 
 
 @router.post("/{task_id}/cancel")

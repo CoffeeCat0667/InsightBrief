@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
 
@@ -33,6 +33,10 @@ class BriefTask(TimestampMixin, Base):
     stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    briefs: Mapped[list["Brief"]] = relationship(
+        cascade="all, delete-orphan", order_by="Brief.id"
+    )
 
 
 class Brief(TimestampMixin, Base):

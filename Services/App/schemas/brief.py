@@ -41,6 +41,12 @@ class BriefTaskRead(BaseModel):
     finished_at: Optional[datetime] = None
 
 
+class BriefTaskDetailRead(BriefTaskRead):
+    """简报任务详情（含关联简报列表）。"""
+
+    briefs: List[BriefRead] = []
+
+
 class BriefItemRead(BaseModel):
     """简报条目 (meta 携带单篇降级标记: {degraded: type})。"""
 
