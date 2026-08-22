@@ -52,3 +52,16 @@ class LLMSettingsUpdate(BaseModel):
 
 class TabsUpdate(BaseModel):
     tabs: List[str] = Field(min_length=1)
+
+
+class LoggingSettingsUpdate(BaseModel):
+    """PUT /api/admin/logging 请求体。"""
+    level: str = Field(min_length=1)
+    max_file_size_mb: int = Field(ge=1, le=100)
+
+
+class LoggingSettingsRead(BaseModel):
+    """GET /api/admin/logging 响应体。"""
+    level: str
+    max_file_size_mb: int
+    log_file_path: str

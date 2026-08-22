@@ -12,17 +12,21 @@ from ...audit_logs import client_ip, write_audit
 from ..admin_settings import (
     LLMProbeError,
     current_llm_fields,
+    get_logging_config,
     get_non_admin_tabs,
     get_registration_enabled,
     probe_llm,
+    set_logging_config,
     set_non_admin_tabs,
     set_registration_enabled,
     write_llm_fields,
 )
 from ..db import get_db
 from ..models import CrawlTask, Role, User
+from ..logging_config import reconfigure_logging
 from ..schemas import (
     LLMSettingsUpdate,
+    LoggingSettingsUpdate,
     RegistrationUpdate,
     TabsUpdate,
     UserAdminCreate,
@@ -337,3 +341,36 @@ def update_non_admin_tabs(
         ip=client_ip(request),
     )
     return ok({"tabs": cleaned})
+
+
+@router.get("/logging")
+def read_logging_settings(
+    session: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return ok(get_logging_config(session))
+
+
+@router.put("/logging")
+def update_logging_settings(
+    body: LoggingSettingsUpdate,
+    request: Request,
+    session: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        cfg = set_logging_config(session, body.level, body.max_file_size_mb)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid", "message": str(exc)},
+        )
+    reconfigure_logging(cfg["level"], cfg["max_file_size_mb"])
+    write_audit(
+        user_id=user.id,
+        action="logging.update",
+        target_type="system",
+        detail={"level": cfg["level"], "max_file_size_mb": cfg["max_file_size_mb"]},
+        ip=client_ip(request),
+    )
+    return ok(cfg)

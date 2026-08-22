@@ -20,7 +20,7 @@ from .article import (
     PlatformRead,
 )
 from .audit_log import AuditLogRead
-from .admin import LLMSettingsUpdate, RegistrationUpdate, TabsUpdate, UserAdminCreate, UserAdminRead, UserAdminUpdate
+from .admin import LLMSettingsUpdate, LoggingSettingsRead, LoggingSettingsUpdate, RegistrationUpdate, TabsUpdate, UserAdminCreate, UserAdminRead, UserAdminUpdate
 from .auth import (
     LoginRequest,
     MeRead,
@@ -76,6 +76,8 @@ __all__ = [
     "ErrorCode",
     "LLMSettingsUpdate",
     "LoginRequest",
+    "LoggingSettingsRead",
+    "LoggingSettingsUpdate",
     "MeRead",
     "Page",
     "PageParams",

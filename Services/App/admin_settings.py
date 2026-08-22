@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -154,3 +155,35 @@ def sync_registration_default(session: Session) -> None:
     """启动引导: 无注册设置记录时写入默认开启。"""
     if _get_setting(session, _REGISTRATION_KEY) is None:
         _set_setting(session, _REGISTRATION_KEY, {"enabled": True}, "是否允许公开注册")
+
+
+# ---------------------------------------------------------------- 日志配置
+_LOGGING_KEY = "logging"
+_ALLOWED_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_DEFAULT_LEVEL = "INFO"
+_DEFAULT_MAX_MB = 10
+_LOG_FILE = os.path.abspath("app.log")
+
+
+def get_logging_config(session: Session) -> Dict[str, Any]:
+    """返回 {level, max_file_size_mb, log_file_path}。"""
+    value = _get_setting(session, _LOGGING_KEY)
+    return {
+        "level": (value or {}).get("level", _DEFAULT_LEVEL),
+        "max_file_size_mb": (value or {}).get("max_file_size_mb", _DEFAULT_MAX_MB),
+        "log_file_path": _LOG_FILE,
+    }
+
+
+def set_logging_config(session: Session, level: str, max_file_size_mb: int) -> Dict[str, Any]:
+    """校验 → 落库 → 返回清理后的配置。"""
+    level = level.upper()
+    if level not in _ALLOWED_LEVELS:
+        raise ValueError(f"无效日志等级: {level}，可选: {', '.join(_ALLOWED_LEVELS)}")
+    if not (1 <= max_file_size_mb <= 100):
+        raise ValueError("max_file_size_mb 必须在 1~100 之间")
+    _set_setting(session, _LOGGING_KEY, {
+        "level": level,
+        "max_file_size_mb": max_file_size_mb,
+    }, "日志配置")
+    return {"level": level, "max_file_size_mb": max_file_size_mb, "log_file_path": _LOG_FILE}

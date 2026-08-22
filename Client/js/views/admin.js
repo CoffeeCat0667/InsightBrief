@@ -36,6 +36,31 @@ export async function adminView(root) {
     </div>
 
     <div class="card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-top:0">日志配置</div>
+      <div class="field-row">
+        <div class="field" style="max-width:200px">
+          <label class="label">日志等级</label>
+          <select class="select" id="log-level">
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO" selected>INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:200px">
+          <label class="label">日志文件最大大小 (MB)</label>
+          <input class="input" id="log-max-mb" type="number" min="1" max="100" value="10">
+        </div>
+      </div>
+      <div class="field">
+        <label class="label">日志文件路径</label>
+        <code id="log-path" style="font-size:13px;color:var(--text-2)"></code>
+      </div>
+      <button class="btn sm" id="log-save">保存</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-top:0">非管理员可见选项卡</div>
       <div class="chips" id="tab-chips">
         ${Object.entries(TAB_LABELS).map(([k, v]) =>
@@ -90,6 +115,27 @@ export async function adminView(root) {
       llmStatus.textContent = `✗ 未保存: ${e.message}`;
       toastErr(e.message);
     }
+  });
+
+  // ---- 日志配置 ----
+  const logLevel = root.querySelector("#log-level");
+  const logMaxMb = root.querySelector("#log-max-mb");
+  const logPath = root.querySelector("#log-path");
+  try {
+    const c = await api.get("/api/admin/logging");
+    logLevel.value = c.level || "INFO";
+    logMaxMb.value = c.max_file_size_mb || 10;
+    logPath.textContent = c.log_file_path || "";
+  } catch (e) { toastErr(e.message); }
+  root.querySelector("#log-save").addEventListener("click", async () => {
+    try {
+      const c = await api.put("/api/admin/logging", {
+        level: logLevel.value,
+        max_file_size_mb: Number(logMaxMb.value),
+      });
+      logPath.textContent = c.log_file_path || "";
+      toastOk("日志配置已更新");
+    } catch (e) { toastErr(e.message); }
   });
 
   // ---- 非管理员选项卡 ----

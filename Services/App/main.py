@@ -20,7 +20,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .db import SessionLocal
-from .admin_settings import sync_registration_default
+from .admin_settings import get_logging_config, sync_registration_default
+from .logging_config import reconfigure_logging
 from Config.config import core_config
 from .routers import admin, articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
@@ -47,6 +48,9 @@ def _bootstrap() -> None:
     with SessionLocal() as session:
         seed_all(session)
         sync_registration_default(session)
+        # 从 PG 恢复日志配置
+        log_cfg = get_logging_config(session)
+        reconfigure_logging(log_cfg["level"], log_cfg["max_file_size_mb"])
     _lifespan_done = True
 
 
