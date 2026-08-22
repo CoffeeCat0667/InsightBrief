@@ -54,6 +54,10 @@ class Brief(TimestampMixin, Base):
     stats: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     generated_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
+    items: Mapped[list["BriefItem"]] = relationship(
+        cascade="all, delete-orphan", order_by="BriefItem.seq"
+    )
+
 
 class BriefItem(Base):
     """简报条目 (可反查原文文章)。"""
