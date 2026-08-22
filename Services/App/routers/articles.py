@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, cast, Date
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
@@ -109,6 +109,50 @@ def search_articles(
     if source_id:
         stmt = stmt.where(Article.source_id == source_id)
     return ok(_page_of(session, stmt, page, page_size))
+
+
+@router.get("/stats-by-day")
+def stats_by_day(
+    day: str,
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """某一天各新闻源的文章数量。"""
+    stmt = (
+        select(Article.source_id, func.count().label("count"))
+        .where(cast(Article.created_at, Date) == day)
+        .group_by(Article.source_id)
+        .order_by(func.count().desc())
+    )
+    rows = session.execute(stmt).all()
+    names = {s.id: s.name for s in session.scalars(select(Source)).all()}
+    return ok([
+        {"source_id": r.source_id, "source_name": names.get(r.source_id, r.source_id), "count": r.count}
+        for r in rows
+    ])
+
+
+@router.get("/stats-by-source")
+def stats_by_source(
+    source_id: str,
+    days: int = 30,
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """某新闻源最近 N 天每天的文章数量。"""
+    from datetime import datetime, timedelta
+    cutoff = datetime.now() - timedelta(days=days)
+    stmt = (
+        select(cast(Article.created_at, Date).label("day"), func.count().label("count"))
+        .where(Article.source_id == source_id, Article.created_at >= cutoff)
+        .group_by("day")
+        .order_by("day")
+    )
+    rows = session.execute(stmt).all()
+    return ok([
+        {"day": str(r.day), "count": r.count}
+        for r in rows
+    ])
 
 
 @router.get("/{article_id}")
