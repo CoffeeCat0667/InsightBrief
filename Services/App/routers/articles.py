@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select, cast, Date
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
@@ -120,7 +120,7 @@ def stats_by_day(
     """某一天各新闻源的文章数量。"""
     stmt = (
         select(Article.source_id, func.count().label("count"))
-        .where(cast(Article.created_at, Date) == day)
+        .where(func.date(Article.created_at) == day)
         .group_by(Article.source_id)
         .order_by(func.count().desc())
     )
@@ -143,7 +143,7 @@ def stats_by_source(
     from datetime import datetime, timedelta
     cutoff = datetime.now() - timedelta(days=days)
     stmt = (
-        select(cast(Article.created_at, Date).label("day"), func.count().label("count"))
+        select(func.date(Article.created_at).label("day"), func.count().label("count"))
         .where(Article.source_id == source_id, Article.created_at >= cutoff)
         .group_by("day")
         .order_by("day")

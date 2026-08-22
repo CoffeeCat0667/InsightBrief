@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import cast, Date, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
@@ -106,7 +106,7 @@ def brief_stats_by_day(
     stmt = (
         select(BriefItem.source_name, func.count().label("count"))
         .join(Brief, BriefItem.brief_id == Brief.id)
-        .where(cast(Brief.created_at, Date) == day)
+        .where(func.date(Brief.created_at) == day)
         .group_by(BriefItem.source_name)
         .order_by(func.count().desc())
     )
@@ -127,7 +127,7 @@ def brief_stats_by_source(
     """某新闻源最近 N 天每天的简报数量。"""
     cutoff = datetime.now() - timedelta(days=days)
     stmt = (
-        select(cast(Brief.created_at, Date).label("day"), func.count().label("count"))
+        select(func.date(Brief.created_at).label("day"), func.count().label("count"))
         .join(BriefItem, BriefItem.brief_id == Brief.id)
         .where(BriefItem.source_name == source_name, Brief.created_at >= cutoff)
         .group_by("day")

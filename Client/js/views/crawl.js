@@ -72,6 +72,36 @@ export async function crawlView(root) {
 
     <div id="live-panel" class="card hidden" style="margin-bottom:16px"></div>
 
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;cursor:pointer" id="stats-toggle">
+        <span style="font-weight:600;font-size:14px">📊 统计信息</span>
+        <span style="color:var(--text-3);font-size:12px" id="stats-arrow">▸ 展开</span>
+      </div>
+      <div id="stats-box" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div class="chips" id="stats-mode" style="margin-bottom:12px">
+          <button class="chip active" data-mode="by-day">按天统计</button>
+          <button class="chip" data-mode="by-source">按源统计</button>
+        </div>
+        <div id="stats-by-day" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="date" class="input" id="stats-day" style="width:160px">
+          <button class="btn primary sm" id="stats-day-btn">查询</button>
+        </div>
+        <div id="stats-by-source" style="display:none;gap:10px;align-items:center;flex-wrap:wrap">
+          <select class="select" id="stats-src" style="min-width:180px">
+            ${sources.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}
+          </select>
+          <select class="select" id="stats-days">
+            <option value="7">近 7 天</option>
+            <option value="30" selected>近 30 天</option>
+            <option value="90">近 90 天</option>
+            <option value="180">近 180 天</option>
+          </select>
+          <button class="btn primary sm" id="stats-src-btn">查询</button>
+        </div>
+        <div id="stats-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div class="section-title" style="margin:0">任务历史</div>
@@ -330,6 +360,73 @@ export async function crawlView(root) {
       toastErr(e.message);
     }
   }
+
+  /* ── 统计信息 ── */
+  const statsResult = root.querySelector("#stats-result");
+  const today = new Date().toISOString().slice(0, 10);
+  root.querySelector("#stats-day").value = today;
+
+  root.querySelector("#stats-toggle").addEventListener("click", () => {
+    const box = root.querySelector("#stats-box");
+    const arrow = root.querySelector("#stats-arrow");
+    if (box.style.display === "none") { box.style.display = ""; arrow.textContent = "▾ 收起"; }
+    else { box.style.display = "none"; arrow.textContent = "▸ 展开"; }
+  });
+
+  root.querySelectorAll("#stats-mode .chip").forEach((c) => c.addEventListener("click", () => {
+    root.querySelectorAll("#stats-mode .chip").forEach((x) => x.classList.remove("active"));
+    c.classList.add("active");
+    root.querySelector("#stats-by-day").style.display = c.dataset.mode === "by-day" ? "flex" : "none";
+    root.querySelector("#stats-by-source").style.display = c.dataset.mode === "by-source" ? "flex" : "none";
+    statsResult.innerHTML = "";
+  }));
+
+  root.querySelector("#stats-day-btn").addEventListener("click", async () => {
+    const day = root.querySelector("#stats-day").value;
+    if (!day) { toastErr("请选择日期"); return; }
+    statsResult.innerHTML = `<div class="skeleton" style="height:40px"></div>`;
+    try {
+      const data = await api.get("/api/articles/stats-by-day", { day });
+      if (!data.length) { statsResult.innerHTML = `<div class="empty-hint">${esc(day)} 暂无数据</div>`; return; }
+      const total = data.reduce((s, r) => s + r.count, 0);
+      const maxCount = data[0].count;
+      statsResult.innerHTML = `
+        <div style="margin-bottom:6px;color:var(--text-2);font-size:13px">${esc(day)} 共 <b>${total}</b> 篇，<b>${data.length}</b> 个来源</div>
+        ${data.map((r) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:140px;font-size:13px;text-align:right;color:var(--text-3)">${esc(r.source_name)}</span>
+            <div style="flex:1;height:18px;background:var(--bg-2);border-radius:4px;overflow:hidden;position:relative">
+              <div style="width:${(r.count / maxCount * 100).toFixed(1)}%;height:100%;background:var(--accent);border-radius:4px"></div>
+            </div>
+            <span style="width:40px;font-size:13px;font-weight:600">${r.count}</span>
+          </div>`).join("")}`;
+    } catch (e) { statsResult.innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`; }
+  });
+
+  root.querySelector("#stats-src-btn").addEventListener("click", async () => {
+    const src = root.querySelector("#stats-src").value;
+    const days = root.querySelector("#stats-days").value;
+    if (!src) { toastErr("请选择来源"); return; }
+    statsResult.innerHTML = `<div class="skeleton" style="height:40px"></div>`;
+    try {
+      const data = await api.get("/api/articles/stats-by-source", { source_id: src, days: Number(days) });
+      if (!data.length) { statsResult.innerHTML = `<div class="empty-hint">近 ${days} 天暂无数据</div>`; return; }
+      const total = data.reduce((s, r) => s + r.count, 0);
+      const maxCount = Math.max(...data.map((r) => r.count));
+      const avg = (total / data.length).toFixed(1);
+      const srcLabel = sources.find((s) => s.id === src)?.name || src;
+      statsResult.innerHTML = `
+        <div style="margin-bottom:6px;color:var(--text-2);font-size:13px">${esc(srcLabel)} 近 ${days} 天共 <b>${total}</b> 篇，日均 <b>${avg}</b> 篇</div>
+        ${data.map((r) => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:85px;font-size:13px;text-align:right;color:var(--text-3)">${esc(r.day.slice(5))}</span>
+            <div style="flex:1;height:18px;background:var(--bg-2);border-radius:4px;overflow:hidden;position:relative">
+              <div style="width:${maxCount ? (r.count / maxCount * 100).toFixed(1) : 0}%;height:100%;background:var(--accent);border-radius:4px"></div>
+            </div>
+            <span style="width:40px;font-size:13px;font-weight:600">${r.count}</span>
+          </div>`).join("")}`;
+    } catch (e) { statsResult.innerHTML = `<div class="empty-hint">${esc(e.message)}</div>`; }
+  });
 
   // ---- 历史列表 ----
   const listEl = root.querySelector("#task-list");
