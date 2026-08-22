@@ -86,6 +86,12 @@ def upsert_article(
     if existing is not None:
         return existing, False
 
+    existing = session.scalar(
+        select(Article).where(Article.url == news_item.news_url)
+    )
+    if existing is not None:
+        return existing, False
+
     meta = news_item.meta_info
     article = Article(
         source_id=source_id,
@@ -208,6 +214,7 @@ def insert_articles_from_links(
                         )
                     )
         except Exception as exc:  # 单篇失败不影响批次
+            session.rollback()
             logger.warning("[%s] 落库失败 %s: %s", source_id, link.url, exc)
             stats["failed"] += 1
         finally:
