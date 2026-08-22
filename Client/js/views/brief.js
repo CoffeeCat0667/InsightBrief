@@ -215,7 +215,9 @@ export async function briefTasksView(root) {
         </div>
         <div id="bstats-by-source" style="display:none">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-            <input class="input" id="bstats-src-name" placeholder="新闻源名称 (如 BBC News)" style="min-width:200px">
+            <select class="select" id="bstats-src" style="min-width:180px">
+              ${sources.map((s) => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join("")}
+            </select>
             <select class="select" id="bstats-days">
               <option value="7">近 7 天</option>
               <option value="30" selected>近 30 天</option>
@@ -308,7 +310,7 @@ export async function briefTasksView(root) {
   async function loadOverview() {
     bstatsOverview.innerHTML = `<div class="skeleton" style="height:60px"></div>`;
     try {
-      const data = await api.get("/api/briefs/stats-overview");
+      const data = await api.get("/api/brief-tasks/stats-overview");
       bstatsOverview.dataset.loaded = "1";
       const catParts = Object.entries(data.by_category).map(
         ([k, v]) => `${CATEGORY_LABELS[k] || k}: ${v}`
@@ -353,9 +355,9 @@ export async function briefTasksView(root) {
   });
 
   root.querySelector("#bstats-src-btn").addEventListener("click", async () => {
-    const srcName = root.querySelector("#bstats-src-name").value.trim();
+    const srcName = root.querySelector("#bstats-src").value;
     const days = root.querySelector("#bstats-days").value;
-    if (!srcName) { toastErr("请输入新闻源名称"); return; }
+    if (!srcName) { toastErr("请选择新闻源"); return; }
     bstatsSrcResult.innerHTML = `<div class="skeleton" style="height:40px"></div>`;
     try {
       const data = await api.get("/api/brief-tasks/stats-by-source", { source_name: srcName, days: Number(days) });
