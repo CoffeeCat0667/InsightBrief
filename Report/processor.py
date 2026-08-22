@@ -35,6 +35,23 @@ from .operators import (
 
 logger = logging.getLogger(__name__)
 
+
+class _ProgressCounter:
+    """线程安全计数器, 用于并发摘要阶段的进度追踪。"""
+
+    def __init__(self) -> None:
+        self._value = 0
+        self._lock = threading.Lock()
+
+    def increment(self) -> int:
+        with self._lock:
+            self._value += 1
+            return self._value
+
+    @property
+    def value(self) -> int:
+        return self._value
+
 # 中文类别 -> 枚举值 (articles.category / briefs.category)
 CATEGORY_CN_EN = {
     "政治": "politics",
@@ -162,6 +179,9 @@ class BriefProcessor:
             summarize_max_tokens=int(summarize_cfg.get("max_tokens") or 0) or None,
             translate_title_max_tokens=int(translate_cfg.get("max_tokens") or 0) or None,
             overview_max_tokens=int(overview_cfg.get("max_tokens") or 0) or None,
+            on_progress=lambda done, total: self._stage(
+                task_id, "分类中", done, total, int(20 * done / total) if total else 20
+            ),
         )
         classify = ClassifyOperator(
             batch_size=int(classify_cfg.get("max_batch") or 0) or DEFAULT_MAX_BATCH
@@ -192,8 +212,9 @@ class BriefProcessor:
         concurrency = int(llm_cfg.get("concurrency", DEFAULT_CONCURRENCY))
         pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="brief-llm")
         cancelled = False
+        summarize_counter = _ProgressCounter()
         try:
-            futures = [pool.submit(self._process_one, ctx, guard, it) for it in items]
+            futures = [pool.submit(self._process_one, ctx, guard, it, task_id, total, summarize_counter) for it in items]
             done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
             fault = next((f.exception() for f in done if f.exception() is not None), None)
             if fault is not None:
@@ -218,17 +239,20 @@ class BriefProcessor:
         for it in items:
             by_cat.setdefault(it["category"], []).append(it)
         briefs = []
-        for cat, group in by_cat.items():
+        cat_list = list(by_cat.items())
+        for ci, (cat, group) in enumerate(cat_list):
             self._check_cancel()
+            self._stage(task_id, "综述中", ci, len(cat_list), 70 + int(20 * ci / len(cat_list)) if cat_list else 70)
             briefs.append(self._compose_overview(ctx, cat, group, stats))
-        self._stage(task_id, "综述完成", total, total, 90)
+        self._stage(task_id, "综述完成", len(cat_list), len(cat_list), 90)
 
         # -- 4. 落库 + 终态
         self._finalize(task_id, briefs, items, stats)
 
     # ---------------------------------------------------------- 单篇处理
     def _process_one(
-        self, ctx: OperatorContext, guard: "_Guard", item: Dict[str, Any]
+        self, ctx: OperatorContext, guard: "_Guard", item: Dict[str, Any],
+        task_id: int, total: int, counter: _ProgressCounter,
     ) -> None:
         """单篇: 摘要 + 标题翻译; 任一步失败 → 整篇降级 (翻译兜底)。"""
         try:
@@ -246,6 +270,10 @@ class BriefProcessor:
                 raise QuarantineError(
                     f"LLM 服务连续 {guard.limit} 次失败, 判定上游不可用, 终止任务"
                 )
+        finally:
+            done = counter.increment()
+            pct = 20 + int(50 * done / total) if total else 70
+            self._stage(task_id, "摘要中", done, total, min(69, pct))
 
     def _translate_fallback(self, item: Dict[str, Any]) -> None:
         """降级兜底: 标题普通翻译; 非中文全文翻译写回文章 (均容错不抛)。"""

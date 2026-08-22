@@ -99,6 +99,7 @@ class OperatorContext:
         summarize_max_tokens: Optional[int] = None,
         translate_title_max_tokens: Optional[int] = None,
         overview_max_tokens: Optional[int] = None,
+        on_progress: Optional[Callable[[int, int], None]] = None,
     ) -> None:
         self.provider = provider
         self.categories = categories or CATEGORIES_DEFAULT
@@ -109,6 +110,7 @@ class OperatorContext:
         self.summarize_max_tokens = summarize_max_tokens
         self.translate_title_max_tokens = translate_title_max_tokens
         self.overview_max_tokens = overview_max_tokens
+        self.on_progress = on_progress or (lambda *_: None)
 
     def check_cancel(self) -> None:
         """阶段间取消检查 — 批前调用; 取消抛 CancelledError 终止算子链。"""
@@ -139,10 +141,13 @@ class ClassifyOperator:
             articles[i : i + self._batch_size]
             for i in range(0, len(articles), self._batch_size)
         ]
+        done = 0
         for batch in batches:
             ctx.check_cancel()
             for idx, cat in self._classify_batch(ctx, batch):
                 result[idx] = cat
+            done += len(batch)
+            ctx.on_progress(done, len(articles))
         return result
 
     def _classify_batch(
