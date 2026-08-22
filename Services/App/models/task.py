@@ -67,6 +67,7 @@ class CrawlRun(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     discovered_links: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     success_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    existed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)

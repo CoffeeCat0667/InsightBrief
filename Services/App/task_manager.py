@@ -652,6 +652,7 @@ class TaskManager:
             run.status = status
             run.discovered_links = (stats or {}).get("discovered", 0)
             run.success_count = (stats or {}).get("inserted", 0)
+            run.existed_count = (stats or {}).get("existed", 0)
             run.failed_count = (stats or {}).get("failed", 0)
             run.error = error
             run.finished_at = datetime.now(timezone.utc)
@@ -677,6 +678,7 @@ class TaskManager:
                         "status": r.status,
                         "discovered_links": r.discovered_links,
                         "success_count": r.success_count,
+                        "existed_count": r.existed_count,
                         "failed_count": r.failed_count,
                         "error": r.error,
                     }

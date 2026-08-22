@@ -356,19 +356,6 @@ class BriefProcessor:
             task = session.get(_brief_task_model(), task_id)
             if task is None:
                 return {"task_id": task_id, "status": "unknown"}
-            brief_count = item_count = 0
-            try:
-                brief_count = session.query(_brief_model()).filter(
-                    _brief_model().task_id == task_id
-                ).count()
-                item_count = (
-                    session.query(_brief_item_model())
-                    .join(_brief_model(), _brief_item_model().brief_id == _brief_model().id)
-                    .filter(_brief_model().task_id == task_id)
-                    .count()
-                )
-            except Exception:
-                pass  # 0003 迁移前 brief_items.meta 列缺失时快照仍可用
             return {
                 "task_id": task.id,
                 "status": task.status,
@@ -378,8 +365,6 @@ class BriefProcessor:
                 "stats": task.stats,
                 "error": task.error,
                 "params": task.params,
-                "brief_count": brief_count,
-                "item_count": item_count,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "started_at": task.started_at.isoformat() if task.started_at else None,
                 "finished_at": task.finished_at.isoformat() if task.finished_at else None,

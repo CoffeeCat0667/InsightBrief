@@ -226,7 +226,8 @@ export async function crawlView(root) {
     const renderRuns = (list = runs) => {
       strip.innerHTML = list.map((r) => {
         const cls = r.status === "completed" ? "ok" : r.status === "failed" ? "err" : r.status === "running" ? "running" : r.status === "skipped" ? "skipped" : "";
-        const label = r.status === "skipped" ? "已跳过" : `${r.success_count || 0}/${(r.success_count || 0) + (r.failed_count || 0)}`;
+        const total = (r.success_count || 0) + (r.existed_count || 0) + (r.failed_count || 0);
+        const label = r.status === "skipped" ? "已跳过" : `${r.success_count || 0}/${total}`;
         return `<span class="run-dot ${cls}">${cls === "running" ? '<span class="dot"></span>' : ""}${esc(srcName(r.source_id))} ${label}</span>`;
       }).join("") || `<span class="empty-hint" style="padding:8px 0">等待源任务开始...</span>`;
     };

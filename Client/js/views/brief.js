@@ -96,7 +96,7 @@ export async function briefView(root) {
   }
   root.querySelector("#b-start-btn").addEventListener("click", startBrief);
 
-  const STAGE_LABELS = { classify: "分类", summarize: "摘要/标题", overview: "综述", persist: "落库" };
+  const STAGE_LABELS = { "分类中": "分类", "分类完成": "分类", "摘要完成": "摘要/标题", "综述完成": "综述", "落库": "落库" };
 
   function startLive(task) {
     ac = new AbortController();
@@ -146,6 +146,13 @@ export async function briefView(root) {
           if (data?.message) logLine("", `<b>${esc(data.status)}</b> ${esc(data.message)}`);
           if (data?.stats?.by_category) {
             logLine("", `分类分布: ${Object.entries(data.stats.by_category).map(([k, v]) => `${CATEGORY_LABELS[k] || k}:${v}`).join(" / ")}`);
+          }
+          const TERMINAL = ["completed", "failed", "cancelled"];
+          if (TERMINAL.includes(data?.status)) {
+            logLine(data.status === "completed" ? "ok" : "err", `** 任务 ${data.status} **`);
+            box.querySelector("#b-cancel")?.remove();
+            ac?.abort();
+            renderBriefs(1);
           }
         }
         if (event.startsWith("brief_") && event !== "brief_update") {
