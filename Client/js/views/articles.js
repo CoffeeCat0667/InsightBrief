@@ -115,10 +115,10 @@ export async function articlesView(root) {
       const a = await api.get(`/api/articles/${id}`);
       const contents = (a.contents || []).map((c) => {
         if (c.type === "image") {
-          return `<div class="content-block media"><img src="${esc(c.content)}" alt="${esc(c.desc || "")}" style="max-width:100%;border-radius:6px;margin:6px 0" loading="lazy">${c.desc ? `<div style="color:var(--text-3);font-size:12.5px;margin-top:2px">${esc(c.desc)}</div>` : ""}</div>`;
+          return `<div style="text-align:center;margin:10px 0"><img src="${esc(c.content)}" alt="${esc(c.desc || "")}" style="max-width:100%;border-radius:6px;display:inline-block" loading="lazy">${c.desc && c.desc !== c.content ? `<div style="color:var(--text-3);font-size:12.5px;margin-top:4px">${esc(c.desc)}</div>` : ""}</div>`;
         }
         if (c.type === "video") {
-          return `<div class="content-block media"><video src="${esc(c.content)}" controls style="max-width:100%;border-radius:6px;margin:6px 0"></video></div>`;
+          return `<div style="text-align:center;margin:10px 0"><video src="${esc(c.content)}" controls style="max-width:100%;border-radius:6px;display:inline-block"></video></div>`;
         }
         return `<div class="content-block">${esc(c.content)}</div>`;
       }).join("");
