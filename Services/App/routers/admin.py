@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...audit_logs import client_ip, write_audit
@@ -22,7 +22,7 @@ from ..admin_settings import (
     write_llm_fields,
 )
 from ..db import get_db
-from ..models import CrawlTask, Role, User
+from ..models import BriefTask, CrawlSchedule, CrawlTask, Role, User
 from ..logging_config import reconfigure_logging
 from ..schemas import (
     LLMSettingsUpdate,
@@ -88,9 +88,16 @@ def create_admin_user(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "validation_error", "message": "角色不存在"},
         )
+    try:
+        pw_hash = hash_password(body.password)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "validation_error", "message": "密码超过长度限制"},
+        )
     target = User(
         username=body.username,
-        password_hash=hash_password(body.password),
+        password_hash=pw_hash,
         email=body.email,
         role_id=role.id,
         is_active=True,
@@ -156,7 +163,13 @@ def update_admin_user(
             )
         target.username = changes["username"]
     if "password" in changes and changes["password"]:
-        target.password_hash = hash_password(changes["password"])
+        try:
+            target.password_hash = hash_password(changes["password"])
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "validation_error", "message": "密码超过长度限制"},
+            )
     if "role" in changes and changes["role"] != (target.role.code if target.role else None):
         new_role = session.scalar(select(Role).where(Role.code == changes["role"]))
         if new_role is None:
@@ -220,15 +233,13 @@ def delete_admin_user(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "conflict", "message": "不能删除最后一个管理员"},
             )
-    has_references = (
-        session.scalar(
-            select(func.count())
-            .select_from(User)
-            .join(CrawlTask, CrawlTask.user_id == User.id)
-            .where(User.id == target.id)
+    has_references = session.scalar(
+        select(
+            exists().where(CrawlTask.user_id == target.id)
+            | exists().where(BriefTask.user_id == target.id)
+            | exists().where(CrawlSchedule.user_id == target.id)
         )
-        or 0
-    ) > 0
+    )
     if has_references:
         target.is_active = False
         session.commit()

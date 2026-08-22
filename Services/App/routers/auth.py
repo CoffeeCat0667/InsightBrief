@@ -66,10 +66,23 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": ErrorCode.CONFLICT, "message": "邮箱已被注册"},
         )
+    try:
+        pw_hash = hash_password(req.password)
+    except ValueError:
+        write_audit(
+            action="user.register_failed",
+            target_type="user",
+            detail={"reason": "密码超过长度限制"},
+            ip=client_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": ErrorCode.VALIDATION_ERROR, "message": "密码超过长度限制"},
+        )
     user_role = session.scalar(select(Role).where(Role.code == "user"))
     user = User(
         username=req.username,
-        password_hash=hash_password(req.password),
+        password_hash=pw_hash,
         email=req.email,
         role_id=user_role.id if user_role else None,
         is_active=True,

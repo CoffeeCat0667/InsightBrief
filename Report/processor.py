@@ -560,7 +560,10 @@ class _Guard:
 
     def touch(self, *, ok: bool, service_error: bool = False) -> None:
         with self._lock:
-            self._counter = self._counter + 1 if service_error else 0
+            if ok:
+                self._counter = 0
+            elif service_error:
+                self._counter += 1
 
     def quarantined(self) -> bool:
         with self._lock:

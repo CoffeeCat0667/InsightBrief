@@ -72,11 +72,15 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def verify_dummy_password(password: str) -> None:
-    """对不存在的用户执行同成本 bcrypt, 减少用户名枚举计时差。"""
+    """对不存在的用户执行同成本 bcrypt, 消除用户名枚举计时侧信道。
+
+    与 verify_password 使用相同的 _password_bytes + bcrypt.checkpw 路径,
+    确保无论用户是否存在, bcrypt 计算成本一致。
+    """
     try:
         encoded = _password_bytes(password)
     except ValueError:
-        encoded = b"password exceeds bcrypt byte limit"
+        encoded = b"\x00" * BCRYPT_MAX_PASSWORD_BYTES
     bcrypt.checkpw(encoded, _DUMMY_PASSWORD_HASH)
 
 
