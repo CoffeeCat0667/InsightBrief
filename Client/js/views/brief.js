@@ -183,7 +183,7 @@ export async function briefTasksView(root) {
         <div class="field" style="display:flex;align-items:center;gap:10px;padding-top:22px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:13.5px">
             <input type="checkbox" id="b-all-pending" style="width:16px;height:16px;cursor:pointer">
-            生成所有未简报文章
+            生成所有未简报文章 (<span id="b-pending-count" style="font-weight:600">-</span> 篇)
           </label>
         </div>
         <div class="field" style="align-self:flex-end">
@@ -278,6 +278,13 @@ export async function briefTasksView(root) {
     maxWrap.style.pointerEvents = allPendingCb.checked ? "none" : "";
     root.querySelector("#b-max").disabled = allPendingCb.checked;
   });
+
+  /* ── 未简报文章数量 ── */
+  const pendingCountEl = root.querySelector("#b-pending-count");
+  try {
+    const { count } = await api.get("/api/brief-tasks/pending-count");
+    pendingCountEl.textContent = count;
+  } catch { pendingCountEl.textContent = "?"; }
 
   /* ── 统计信息 ── */
   const bstatsOverview = root.querySelector("#bstats-overview");

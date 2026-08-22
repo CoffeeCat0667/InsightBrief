@@ -160,6 +160,28 @@ def stats_by_source(
     ])
 
 
+@router.get("/stats-overview")
+def stats_overview(
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """文章概览: 总数 + 各来源数量 Top 20。"""
+    total = session.scalar(select(func.count()).select_from(Article)) or 0
+    src_stmt = (
+        select(Article.source_id, func.count().label("count"))
+        .group_by(Article.source_id)
+        .order_by(func.count().desc())
+        .limit(20)
+    )
+    rows = session.execute(src_stmt).all()
+    names = {s.id: s.name for s in session.scalars(select(Source)).all()}
+    by_source = [
+        {"source_id": r.source_id, "source_name": names.get(r.source_id, r.source_id), "count": r.count}
+        for r in rows
+    ]
+    return ok({"total": total, "by_source": by_source})
+
+
 @router.get("/{article_id}")
 def get_article(
     article_id: int,

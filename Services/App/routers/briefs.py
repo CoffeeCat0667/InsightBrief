@@ -145,6 +145,19 @@ def brief_stats_by_source(
     ])
 
 
+@router.get("/pending-count")
+def pending_brief_count(
+    session: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """未生成简报的文章数量。"""
+    subq = select(BriefItem.article_id).distinct()
+    count = session.scalar(
+        select(func.count()).select_from(Article).where(~Article.id.in_(subq))
+    ) or 0
+    return ok({"count": count})
+
+
 @router.get("/stats-overview")
 def brief_stats_overview(
     session: Session = Depends(get_db),
