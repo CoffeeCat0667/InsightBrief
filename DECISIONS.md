@@ -1,7 +1,7 @@
 # 架构决策记录 (ARCHITECTURE DECISIONS)
 
-> **日期**: 2026-08-20 Ver0.2.0 发布复核
-> **状态**: 持续更新(Ver0.2.0 决策已落地)
+> **日期**: 2026-08-22 Ver0.2.5 发布复核
+> **状态**: 持续更新(Ver0.2.5 决策已落地)
 > **范围**: 面向 Web 后端化改造的已确认决策, 只记录结论, 不涉及代码实现。
 
 ---
@@ -22,8 +22,20 @@
 | §0.2-4 | 自动简报处理哪些文章？ | **仅本次抓取新增 inserted 文章** | `crawl_task_articles` 精确关联；existed/无新增不触发，避免历史文章重复送 LLM |
 | §0.2-5 | 前端路由形式？ | **History API，彻底移除 Hash 路由** | URL 无 `#`；FastAPI/Nginx 需 SPA fallback |
 | §0.2-6 | 管理能力范围？ | **增加 admin-only 管理面板** | 用户 CRUD、注册开关、LLM 在线探测双写、非管理员选项卡可见性 |
-| §0.2-7 | 非管理员默认可见哪些选项卡？ | **文章、简报** | 抓取任务/新闻源可由 admin 配置；审计/管理面板始终隐藏 |
-| §0.2-8 | LLM 配置修改何时落库？ | **probe 成功后同时写 JSON 与 PG** | probe 失败返回 upstream_error，配置不变；api_key 不写审计 |
+| §0.2-7 | 非管理员默认可见哪些选项卡？ | **文章、简报、简报任务** | 抓取任务/新闻源可由 admin 配置；审计/管理面板始终隐藏 |
+| §0.2-8 | LLM 配置修改何时落库？ | **probe 成功后写 PG + 回写 .env** | probe 失败返回 upstream_error，配置不变；api_key 不写审计 |
+
+---
+
+## Ver0.2.5 已确认决策
+
+| 编号 | 问题 | 决策 | 影响 |
+|---|---|---|---|
+| §0.2.5-1 | 敏感配置存储位置？ | **全部迁移到 `.env`** | JWT secret、admin creds、DB DSN、Redis password、LLM base_url/api_key/model_id、CORS origins、proxy；`.env` 加入 `.gitignore`，`Config/*.json` 不含敏感值 |
+| §0.2.5-2 | LLM 配置同步方向？ | **双向同步：`.env` ↔ PG** | `sync_llm_config()` PG 非空 → 回写 `.env`；PG 空 → 使用 `.env` 值；管理面板仅写 PG + 回写 `.env` |
+| §0.2.5-3 | 统计信息放在哪个选项卡？ | **文章统计在抓取任务，简报统计在简报任务** | 按天/按源统计前端横向柱状图；简报额外增加概览模式 |
+| §0.2.5-4 | 批量简报生成策略？ | **all_pending 模式排除已有简报文章** | `BriefTaskCreate.all_pending=true` 时忽略 `max_items`，为所有无简报条目的文章生成 |
+| §0.2.5-5 | PostgreSQL date 比较方式？ | **使用日期范围比较而非 `func.date()`** | `col >= start AND col < end` 避免 `date = varchar` 类型错误 |
 
 ---
 

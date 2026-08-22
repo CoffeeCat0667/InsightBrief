@@ -2,7 +2,7 @@
 
 > 多源新闻智能抓取与翻译阅读 —— CLI + **Web 后端**(FastAPI / PostgreSQL / Redis / SSE)
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.5-blue)
 ![License](https://img.shields.io/badge/license-Apache_2.0-green)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
@@ -13,11 +13,13 @@
 
 - **25+ 媒体源**,分类:国内综合 / 国内官媒 / 外媒综合 / 外媒财经 / 外媒科技,源注册表配置化(`Config/Services.json`,27 源)
 - **自动发现**:RSS / 栏目页 / 自定义(CNN 首页内嵌 JSON)三种模式
-- **管理面板**:管理员管理用户(新增/编辑/删除或软禁用)、注册入口、LLM 三字段连通性检查与双写、非管理员可见选项卡
+- **管理面板**:管理员管理用户(新增/编辑/删除或软禁用)、注册入口、LLM 三字段连通性检查与双写、非管理员可见选项卡、日志配置(等级/大小即时生效)
 - **定时抓取**:每 N 小时循环、最多执行次数(0=无限)、首次启用立即执行、可选抓取完成后自动简报;服务重启后从 PG 恢复计划
 - **Web 后端 API**:登录鉴权(JWT + 角色)、管理面板、任务运行时(ThreadPoolExecutor 4 并发)、定时抓取、统一 `{success, data, error}` 契约、`/docs` 交互文档
 - **SSE 进度通道**:抓取/简报任务实时进度,Redis 历史事件断线重放(无轮询降级);前端使用 fetch + ReadableStream 解析 SSE
-- **简报系统**:LLM 分类(政治/经济/文化/科技)+ 中文标题 + 摘要 + 分类综述;抓取完成可仅针对本次新增文章自动生成简报;降级链路(403 风控/服务错误两分)、取消=原子不落库、全挂 failed 残料保留
+- **简报系统**:LLM 分类(政治/经济/文化/科技)+ 中文标题 + 摘要 + 分类综述;抓取完成可仅针对本次新增文章自动生成简报;降级链路(403 风控/服务错误两分)、取消=原子不落库、全挂 failed 残料保留;支持批量为所有未简报文章生成简报
+- **统计信息**:抓取任务页文章按天/按源统计;简报任务页简报概览/按天/按源统计;横向柱状图可视化
+- **敏感字段 `.env` 管理**:JWT secret、管理员凭据、DB DSN、Redis password、LLM 凭据、CORS origins 等全部从 `.env` 加载,`Config/*.json` 不含敏感值
 
 ## 架构
 
@@ -71,7 +73,8 @@ InsightBrief/
 pip install -r requirements.txt
 python -m playwright install chromium   # CSR 站点浏览器内核
 
-# 1) 建库 + 迁移 (DSN 在 Config/db.json; 密码 @ 须写 %40)
+# 1) 复制 .env.example 为 .env 并填入实际值 (DB DSN / JWT secret / 管理员密码 / LLM api_key 等)
+# 2) 建库 + 迁移 (DSN 从 .env 读取; 密码 @ 须写 %40)
 alembic upgrade head
 
 # 2) 启动 Web 服务 (端口 8000; 启动时自动: 建表兜底 + 27 源同步 + LLM 配置同步 + 注册设置初始化 + admin 种子)
@@ -81,7 +84,7 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 `alembic upgrade head` 当前迁移链包括 0001~0003、平台超时/审计/国内源配额和定时任务迁移，当前版本为 `h9c0d1e2f3a4`。
 
 - 交互 API 文档: http://127.0.0.1:8000/docs
-- 初始管理员: 空库启动时使用 `Config/Core.json` 中的 `auth.admin_username`/`auth.admin_password`; 若配置缺失服务拒绝初始化,避免默认凭据风险。生产部署请保护该配置文件。
+- 初始管理员: 空库启动时使用 `.env` 中的 `IB_ADMIN_USERNAME`/`IB_ADMIN_PASSWORD`; 若配置缺失服务拒绝初始化,避免默认凭据风险。
 - CLI 仍可用: `python -m Services.CLI.main` 或 `python Services/CLI/main.py`(菜单输入媒体编号抓取最新一条)
 
 ## API 概览
@@ -97,6 +100,9 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 | GET | `/api/tasks/{id}/events` | 抓取任务 SSE 进度 (crawl) |
 | POST/GET | `/api/brief-tasks`、`GET /{id}`、`POST /{id}/cancel`、`GET /{id}/events` | 简报任务 + SSE (brief 独立端点) |
 | GET | `/api/briefs(/{id})` | 简报列表/详情 |
+| GET | `/api/articles/stats-by-day`、`/stats-by-source` | 文章按天/按源统计 |
+| GET | `/api/brief-tasks/stats-by-day`、`/stats-by-source`、`/stats-overview` | 简报按天/按源/概览统计 |
+| GET/PUT | `/api/admin/logging` | 日志配置(admin; 等级/大小即时生效) |
 | GET | `/api/audit-logs` | 审计日志 (admin; action/user_id 筛选 + 分页) |
 | GET/POST/PATCH/DELETE | `/api/admin/users`、`/api/admin/users/{id}` | 管理用户(admin; 新增/编辑/删除或软禁用) |
 | GET/PUT | `/api/admin/registration`、`/api/admin/llm`、`/api/admin/tabs` | 注册入口、LLM 连通性检查双写、非管理员选项卡可见性(admin) |
@@ -116,19 +122,24 @@ python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 | 管理面板 | 用户 CRUD、注册开关、LLM probe 双写、非管理员导航权限 |
 ## 配置与密钥
 
-所有配置只从 `Config/config.py` 加载(`Config/*.json` + lru_cache + 必填校验)，Ver0.2.0 起不读取环境变量；后续可再迁移到 `.env` 或 secrets:
+**Ver0.2.5 起**：敏感字段全部从 `.env` 加载（通过 `python-dotenv`），非敏感配置保留在 `Config/*.json`。`.env` 已加入 `.gitignore`，不纳入版本控制。模板见 `.env.example`。
 
-- `Config/Core.json`:代理、UA、重试、playwright、generic 阈值，以及 JSON 内置 `jwt_secret/admin_username/admin_password/jwt_expire_seconds`、登录限流、可信反代、`web.disable_docs`
-- `Config/Clawer.json`:25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)**
-- `Config/Services.json`:27 源注册表 + platform/link 正则 + translator + domestic_source_ids
-- `Config/LLM.json`:LLM 三字段(base_url/api_key/model_id)+ 算子参数；Ver0.2.0 不接受 `LLM_API_KEY` 覆盖；管理员可在管理面板先探测连通性后同时写回 JSON 与 PG；api_key 仍按既有决策明文保存,生产部署时再评估密钥方案(DECISIONS §15-9)
-- `Config/db.json`:PG/Redis DSN、host/port/db/password，JSON 为唯一来源；`.env.example` 仅保留迁移提示
+| 配置来源 | 内容 |
+|---|---|
+| `.env` (敏感) | `IB_JWT_SECRET`、`IB_ADMIN_USERNAME`、`IB_ADMIN_PASSWORD`、`IB_POSTGRES_DSN`、`IB_REDIS_PASSWORD`、`IB_LLM_BASE_URL`、`IB_LLM_API_KEY`、`IB_LLM_MODEL_ID`、`IB_PROXY_DEFAULT`、`IB_CORS_ORIGINS` |
+| `Config/Core.json` | UA、重试、Playwright、rate limit、trusted proxies、`web.disable_docs` |
+| `Config/Clawer.json` | 25 平台 base_url / xpath / UA / fetch_strategy / **`fetch_timeout`(超时唯一来源)** |
+| `Config/Services.json` | 27 源注册表 + platform/link 正则 + translator + domestic_source_ids |
+| `Config/LLM.json` | timeout、retry、operator params（base_url/api_key/model_id 已迁移至 `.env`） |
+| `Config/db.json` | pool_size、max_overflow、Redis host/port/db（DSN 已迁移至 `.env`） |
+
+LLM 配置双向同步：`.env` → `sync_llm_config()` → PG `system_settings("llm")` → `get_llm_provider()`（读 PG）。管理面板修改 LLM 时仅写 PG + 回写 `.env`。
 
 ### 管理面板与权限
 
-管理面板只对管理员显示，提供用户管理、注册入口开关、LLM 配置和非管理员选项卡可见性。非管理员默认只显示“文章”和“简报”；管理员可以在 `/admin` 中调整为文章/简报/抓取任务/新闻源的任意非空子集。审计日志和管理面板始终不对非管理员开放。
+管理面板只对管理员显示，提供用户管理、注册入口开关、LLM 配置、非管理员选项卡可见性和日志配置。非管理员默认只显示“文章”、“简报”和“简报任务”；管理员可以在 `/admin` 中调整为文章/简报/简报任务/抓取任务/新闻源的任意非空子集。审计日志和管理面板始终不对非管理员开放。
 
-> 配置在进程启动时定型(lru_cache);启动时 Config 会同步覆盖 DB(sources 与 system_settings),运行中直接修改文件需重启生效；管理面板更新 LLM 时会同步写 JSON 与 PG 并清理进程内 LLM 配置缓存。
+> 敏感配置从 `.env` 加载（lru_cache + 必填校验）；启动时 Config 会同步覆盖 DB（sources 与 system_settings），运行中修改 `.env` 或 JSON 需重启生效；管理面板更新 LLM 时仅写 PG + 回写 `.env` 并清理进程内 LLM 配置缓存。
 
 ### 定时抓取与自动简报
 

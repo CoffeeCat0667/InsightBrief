@@ -103,10 +103,15 @@ def brief_stats_by_day(
     _: User = Depends(get_current_user),
 ):
     """某一天各新闻源的简报数量。"""
+    from datetime import date as _date, timedelta
+    day_date = _date.fromisoformat(day)
+    next_day = day_date + timedelta(days=1)
+    day_start = datetime.combine(day_date, datetime.min.time())
+    day_end = datetime.combine(next_day, datetime.min.time())
     stmt = (
         select(BriefItem.source_name, func.count().label("count"))
         .join(Brief, BriefItem.brief_id == Brief.id)
-        .where(func.date(Brief.created_at) == day)
+        .where(Brief.created_at >= day_start, Brief.created_at < day_end)
         .group_by(BriefItem.source_name)
         .order_by(func.count().desc())
     )

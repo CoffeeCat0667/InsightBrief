@@ -118,9 +118,14 @@ def stats_by_day(
     _: User = Depends(get_current_user),
 ):
     """某一天各新闻源的文章数量。"""
+    from datetime import date as _date, datetime, timedelta
+    day_date = _date.fromisoformat(day)
+    next_day = day_date + timedelta(days=1)
+    day_start = datetime.combine(day_date, datetime.min.time())
+    day_end = datetime.combine(next_day, datetime.min.time())
     stmt = (
         select(Article.source_id, func.count().label("count"))
-        .where(func.date(Article.created_at) == day)
+        .where(Article.created_at >= day_start, Article.created_at < day_end)
         .group_by(Article.source_id)
         .order_by(func.count().desc())
     )

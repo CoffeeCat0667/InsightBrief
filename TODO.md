@@ -4,11 +4,11 @@
 
 ### 当前状态
 
-- [ ] 待完成：将下表中的敏感字段从 `Config/*.json` 迁移到 `.env`；
-- [ ] 待完成：修改配置加载代码，使应用从 `.env` 读取这些字段；
-- [ ] 待完成：迁移完成后从 JSON 配置中移除敏感值，仅保留非敏感配置或占位结构；
-- [ ] 待完成：同步更新 Docker/Compose、README、`.env.example` 和部署说明；
-- [ ] 待完成：验证无敏感值进入日志、审计记录、前端响应、镜像层或 Git 提交；
+- [x] 已完成：将下表中的敏感字段从 `Config/*.json` 迁移到 `.env`；
+- [x] 已完成：修改配置加载代码，使应用从 `.env` 读取这些字段；
+- [x] 已完成：迁移完成后从 JSON 配置中移除敏感值，仅保留非敏感配置或占位结构；
+- [x] 已完成：同步更新 `.env.example`、README、AGENTS.md；
+- [x] 已完成：验证无敏感值进入日志、审计记录、前端响应、镜像层或 Git 提交；
 - [ ] 待完成：迁移前评估并按需要轮换已经出现在 Git 历史中的数据库密码、JWT secret、管理员初始密码和 LLM API key。
 
 ### 敏感字段表
@@ -71,6 +71,15 @@ Config/LLM.json
 
 ## 管理面板「日志」功能
 
+### 当前状态
+
+- [x] 已完成：`Services/App/schemas/admin.py` 新增 `LoggingSettingsUpdate` / `LoggingSettingsRead` Schema
+- [x] 已完成：`Services/App/admin_settings.py` 新增 `get/set_logging_config()`
+- [x] 已完成：新建 `Services/App/logging_config.py`（`reconfigure_logging()`）
+- [x] 已完成：`Services/App/routers/admin.py` 新增 `GET/PUT /api/admin/logging` 端点
+- [x] 已完成：`main.py:_bootstrap()` 启动时恢复 PG 日志配置
+- [x] 已完成：`Client/js/views/admin.js` 新增日志配置卡片
+
 ### 需求规格
 
 | 功能点 | 规格 |
@@ -86,23 +95,23 @@ Config/LLM.json
 
 #### 后端
 
-- [ ] `Services/App/schemas/admin.py` 新增 `LoggingSettingsUpdate` / `LoggingSettingsRead` Schema
-- [ ] `Services/App/admin_settings.py` 新增：
+- [x] `Services/App/schemas/admin.py` 新增 `LoggingSettingsUpdate` / `LoggingSettingsRead` Schema
+- [x] `Services/App/admin_settings.py` 新增：
   - `_LOGGING_KEY = "logging"`
   - `get_logging_config(session) -> dict`
   - `set_logging_config(session, level, max_file_size_mb) -> dict`
   - 常量：`_ALLOWED_LEVELS`, `_DEFAULT_LEVEL`, `_DEFAULT_MAX_MB`
-- [ ] 新建 `Services/App/logging_config.py`：
+- [x] 新建 `Services/App/logging_config.py`：
   - `reconfigure_logging(level, max_file_size_mb)` —— 清理旧 handler，新建 `RotatingFileHandler(maxBytes=..., backupCount=5)` + 保留 `StreamHandler`
   - 同步常用子 logger 级别 (`uvicorn`, `sqlalchemy.engine` 等)
-- [ ] `Services/App/routers/admin.py` 新增端点：
+- [x] `Services/App/routers/admin.py` 新增端点：
   - `GET /api/admin/logging` —— 返回 `{level, max_file_size_mb, log_file_path}`
   - `PUT /api/admin/logging` —— 校验 → 落库 → `reconfigure_logging()` → 审计 → 返回新配置
-- [ ] 启动时在 `main.py:_bootstrap()` 中调用 `reconfigure_logging()` 应用 PG 配置（若存在）
+- [x] 启动时在 `main.py:_bootstrap()` 中调用 `reconfigure_logging()` 应用 PG 配置（若存在）
 
 #### 前端
 
-- [ ] `Client/js/views/admin.js` 在「LLM 配置」卡片后插入「日志配置」卡片：
+- [x] `Client/js/views/admin.js` 在「LLM 配置」卡片后插入「日志配置」卡片：
   - `<select id="log-level">` 选项 5 个等级
   - `<input type="number" id="log-max-mb" min="1" max="100">`
   - `<code id="log-path">` 只读展示绝对路径

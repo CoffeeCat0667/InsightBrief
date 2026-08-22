@@ -5,7 +5,8 @@
 ```bash
 pip install -r requirements.txt
 python -m playwright install chromium       # CSR site crawler needs Chromium
-alembic upgrade head                        # DSN from Config/db.json; @ → %40
+cp .env.example .env                        # Fill in actual credentials
+alembic upgrade head                        # DSN from .env IB_POSTGRES_DSN; @ → %40
 python -m uvicorn Services.App.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -88,8 +89,9 @@ After code changes, also verify: health endpoint, OpenAPI routes, SPA fallback d
 | `Config/LLM.json` | timeout, retry, operator params |
 | `Config/db.json` | pool_size, max_overflow, Redis host/port/db |
 | `.env` | All sensitive fields: JWT secret, admin creds, DB DSN, Redis password, LLM base_url/api_key/model_id |
+| `.env` | All sensitive fields: JWT secret, admin creds, DB DSN, Redis password, LLM base_url/api_key/model_id |
 
 ## Next Planned Work
 
 See `TODO.md` — sensitive fields migration to `.env` has been completed. Remaining work:
--轮换已暴露在 Git 历史中的凭证 (DB password, JWT secret, admin password, LLM API key)
+- 轮换已暴露在 Git 历史中的凭证 (DB password, JWT secret, admin password, LLM API key)

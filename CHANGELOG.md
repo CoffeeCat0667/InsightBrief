@@ -41,6 +41,55 @@ InsightBrief 0.2.0：Web 产品化能力、管理能力、定时抓取与无 Has
 - 管理面板用户新增/重名冲突/自己删除保护/最后管理员保护/引用用户软禁用/无引用硬删验证。
 - LLM probe 成功/失败路径验证，失败时不写配置。
 
+## [Ver0.2.5] - 2026-08-22
+
+InsightBrief 0.2.5：统计信息面板、简报批量生成、敏感字段 `.env` 迁移、配置日志。
+
+### 新增
+
+- **文章统计信息**（抓取任务选项卡）：
+  - 按天统计：选择日期，横向柱状图展示各新闻源当日文章数量。
+  - 按源统计：选择新闻源 + 时间范围（7/30/90/180 天），横向柱状图展示每日文章数量及日均值。
+- **简报统计信息**（简报任务选项卡）：
+  - 概览：总简报数 + 各分类数量 + Top 来源柱状图。
+  - 按天统计：选择日期，横向柱状图展示各来源当日简报数量。
+  - 按源统计：输入源名 + 时间范围，横向柱状图展示每日简报数量及日均值。
+- **批量生成未简报文章**：简报任务新增「生成所有未简报文章」复选框；勾选后忽略"最大文章数"限制，为数据库中所有尚无简报条目的文章生成简报。
+- **管理面板日志配置**：管理员可调整日志等级（DEBUG/INFO/WARNING/ERROR/CRITICAL）和文件最大大小（MB），即时生效，配置落库 `system_settings`，重启自动恢复。
+- **敏感字段迁移到 `.env`**：
+  - 所有敏感配置（JWT secret、管理员凭据、DB DSN、Redis password、LLM base_url/api_key/model_id、CORS origins、代理地址）从 `Config/*.json` 迁移到 `.env`。
+  - `Config/config.py` 新增 `_env_required()`、`update_env_file()`、`core_config()["web"]["cors_origins"]`。
+  - `admin_settings.py` LLM `write_llm_fields()` 仅写 PG，不再写 JSON。
+  - `.env` 已加入 `.gitignore`，不纳入版本控制。
+- **ICON 图标**：`ICON.png` + `ICON_Transparent.png`，用于 favicon、apple-touch-icon、侧边栏和认证品牌标记。
+- **文章媒体渲染**：文章详情支持 `<img>` / `<video>` 标签渲染 `article_contents` 和 `article_media` 中的媒体 URL；翻译过滤排除 `type="image"` 片段。
+
+### 修复
+
+- **PostgreSQL date = varchar 类型错误**：统计端点 `func.date(col) == string` 改为日期范围比较（`col >= start AND col < end`），解决 `UndefinedFunction` 异常。
+- **BBC China 爬取失败**：`upsert_article()` 增加全局 URL 去重检查；`insert_articles_from_links()` 异常后 `session.rollback()` 防止脏事务。
+- **进度条快照**：`CrawlRun` 新增 `existed_count` 字段；brief 快照移除无用 `brief_count`/`item_count`；`STAGE_LABELS` 改用中文 key。
+- **CORS 配置**：`IB_CORS_ORIGINS` 从 `.env` 读取（逗号分隔），fallback `["*"]`。
+- **XSS 防护**：`toast()` 使用 `_escHtml()` 转义 HTML。
+- **LLM 配置双向同步**：`sync_llm_config()` PG 非空 → 回写 `.env`；PG 空 → 使用 `.env` 值。
+- **403 错误分类**：`openai_v1.py` 解析 `detail.code`，已知内容策略代码 → `ArticleContentError`。
+- **启动 LLM 探针**：`probe_llm_on_startup()` 发送最小请求验证密钥，失败仅告警不阻塞启动。
+
+### 变更
+
+- 版本号升至 `0.2.5`（README badge、CHANGELOG 标题）。
+- `buglist.md` 18 项已修复，仅剩 BUG-08（PII in audit）P3 待处理。
+- 导航 tab 新增 `brief_tasks`（简报任务），非管理员默认可见。
+- 抓取任务页隐藏非管理员的定时任务区域（避免 403）。
+
+### 验证
+
+- Python `compileall`、全量 JS `node --check`、`git diff --check`。
+- 统计端点实际查询验证（date 范围比较 + 分组统计）。
+- 简报统计概览/按天/按源三模式前端渲染验证。
+- 批量生成 all_pending 模式：排除已有简报文章，忽略 max_items。
+- 日志配置 CRUD + 重启恢复验证。
+
 ## [Unreleased]
 
 ### 新增
