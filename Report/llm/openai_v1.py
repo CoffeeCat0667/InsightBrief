@@ -120,6 +120,20 @@ class OpenAI_V1Provider(LLMProvider):
         except ValueError:
             detail = resp.text[:200]
         if status == 403:
+            error_code = ""
+            if isinstance(detail, dict):
+                error_obj = detail.get("error") or detail
+                error_code = str(error_obj.get("code", "")).lower()
+            _CONTENT_POLICY_CODES = frozenset({
+                "content_policy", "content_moderation", "sensitive",
+                "content_policy_violation", "moderation",
+            })
+            if error_code and error_code not in _CONTENT_POLICY_CODES:
+                raise LLMServiceError(
+                    f"LLM 鉴权/权限失败 (403): {str(detail)[:200]}",
+                    kind="http_error",
+                    detail=detail,
+                )
             raise ArticleContentError(
                 f"内容政策限制 (403): {str(detail)[:200]}", detail=detail
             )

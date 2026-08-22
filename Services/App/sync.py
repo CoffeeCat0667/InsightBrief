@@ -129,31 +129,77 @@ def run_sources_sync() -> SyncResult:
 
 
 _LLM_SETTING_KEY = "llm"
+_LLM_SENSITIVE_KEYS = ("base_url", "api_key", "model_id")
+_LLM_ENV_MAP = {
+    "base_url": "IB_LLM_BASE_URL",
+    "api_key": "IB_LLM_API_KEY",
+    "model_id": "IB_LLM_MODEL_ID",
+}
 
 
 def sync_llm_config(session: Session) -> bool:
-    """LLM.json -> system_settings (key="llm"), 幂等 upsert。
+    """双向同步: .env <-> system_settings (key="llm"), 仅处理 3 个敏感字段。
 
-    应用实现只读 PG; 本函数是 LLM 配置进入 DB 的唯一入口 (由启动引导调用)。
-    返回 True 表示发生写入/更新。
+    规则:
+    - PG 不存在 → 用 .env 值写入 PG
+    - PG 存在 → 对每个敏感字段: PG 非空则反写 .env, PG 为空则用 .env 值补写 PG
+    - 返回 True 表示发生写入/变更。
     """
-    cfg = dict(llm_config())
+    import os
+
+    from Config.config import update_env_file
+
+    env_values = {key: os.environ.get(_LLM_ENV_MAP[key], "") for key in _LLM_SENSITIVE_KEYS}
+
     setting = session.get(SystemSetting, _LLM_SETTING_KEY)
-    if setting is not None and setting.value == cfg:
-        return False
     if setting is None:
-        session.add(
-            SystemSetting(
-                key=_LLM_SETTING_KEY,
-                value=cfg,
-                description="LLM 配置 (OpenAI V1 统一接口), 来源 Config/LLM.json",
-            )
-        )
-        logger.info("[sync] 写入 LLM 配置: %s", cfg.get("model_id"))
+        pg_values = {key: "" for key in _LLM_SENSITIVE_KEYS}
     else:
-        setting.value = cfg
-        logger.info("[sync] 更新 LLM 配置: %s", cfg.get("model_id"))
-    return True
+        cfg = setting.value or {}
+        pg_values = {key: str(cfg.get(key, "")) for key in _LLM_SENSITIVE_KEYS}
+
+    env_to_pg = {}
+    pg_to_env = {}
+    for key in _LLM_SENSITIVE_KEYS:
+        pg_val = pg_values[key]
+        env_val = env_values[key]
+        if pg_val:
+            if not env_val or env_val != pg_val:
+                pg_to_env[_LLM_ENV_MAP[key]] = pg_val
+        else:
+            if env_val:
+                env_to_pg[key] = env_val
+
+    changed = False
+
+    if env_to_pg:
+        if setting is None:
+            full_cfg = dict(llm_config())
+            full_cfg.update(env_to_pg)
+            session.add(
+                SystemSetting(
+                    key=_LLM_SETTING_KEY,
+                    value=full_cfg,
+                    description="LLM 配置 (OpenAI V1 统一接口), 来源 .env",
+                )
+            )
+            logger.info("[sync] 用 .env 值创建 LLM 配置: %s", env_to_pg.get("model_id"))
+        else:
+            cfg = dict(setting.value or {})
+            cfg.update(env_to_pg)
+            setting.value = cfg
+            logger.info("[sync] 用 .env 值补充 PG LLM 字段: %s", list(env_to_pg.keys()))
+        changed = True
+
+    if pg_to_env:
+        try:
+            update_env_file(pg_to_env)
+            logger.info("[sync] PG LLM 值反写 .env: %s", list(pg_to_env.keys()))
+        except Exception:
+            logger.warning("[sync] .env 文件写入失败", exc_info=True)
+        changed = True
+
+    return changed
 
 
 def run_llm_sync() -> bool:
@@ -165,3 +211,56 @@ def run_llm_sync() -> bool:
     if changed:
         logger.info("[sync] LLM 配置同步完成")
     return changed
+
+
+def probe_llm_on_startup() -> bool:
+    """启动探测: 发送最小请求验证 LLM key 有效性。返回 True=成功。
+
+    失败仅 warning 日志, 不阻断启动。
+    """
+    import requests as _requests
+
+    with SessionLocal() as session:
+        setting = session.get(SystemSetting, _LLM_SETTING_KEY)
+    if setting is None:
+        logger.warning("[probe] LLM 配置不存在, 跳过探测")
+        return False
+    cfg = setting.value or {}
+    base_url = str(cfg.get("base_url", "")).rstrip("/")
+    api_key = str(cfg.get("api_key", ""))
+    model_id = str(cfg.get("model_id", ""))
+    if not base_url or not api_key or not model_id:
+        logger.warning("[probe] LLM 配置字段不完整, 跳过探测")
+        return False
+
+    try:
+        resp = _requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model_id,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+            },
+            timeout=15,
+        )
+    except _requests.exceptions.Timeout:
+        logger.warning("[probe] LLM 连接超时 (15s)")
+        return False
+    except _requests.exceptions.RequestException as exc:
+        logger.warning("[probe] LLM 连接失败: %s", exc)
+        return False
+
+    if resp.status_code == 200:
+        logger.info("[probe] LLM key 有效, model=%s", model_id)
+        return True
+
+    try:
+        detail = resp.json()
+    except ValueError:
+        detail = resp.text[:200]
+    logger.warning("[probe] LLM 探测失败 HTTP %d: %s", resp.status_code, str(detail)[:200])
+    return False

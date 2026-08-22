@@ -25,7 +25,7 @@ from Config.config import core_config
 from .routers import admin, articles, audit_logs, auth, briefs, schedules, sources, tasks, translate
 from .schemas import ERROR_HTTP_STATUS, ApiError, ErrorCode, fail
 from .security import seed_all
-from .sync import ensure_schema, run_llm_sync, run_sources_sync
+from .sync import ensure_schema, probe_llm_on_startup, run_llm_sync, run_sources_sync
 from .task_manager import manager
 from .schedule_manager import schedule_manager
 from .auto_brief import auto_brief_manager
@@ -43,6 +43,7 @@ def _bootstrap() -> None:
     ensure_schema()
     run_sources_sync()
     run_llm_sync()
+    probe_llm_on_startup()
     with SessionLocal() as session:
         seed_all(session)
         sync_registration_default(session)

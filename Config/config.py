@@ -57,6 +57,40 @@ def _env_required(name: str) -> str:
     return val
 
 
+_ENV_PATH = _PROJECT_ROOT / ".env"
+
+
+def update_env_file(updates: Dict[str, str]) -> int:
+    """原地更新 .env 文件中的环境变量, 不存在则追加。返回更新/新增数。
+
+    同步更新 os.environ, 使当前进程立即生效。
+    """
+    lines: list[str] = []
+    if _ENV_PATH.is_file():
+        lines = _ENV_PATH.read_text(encoding="utf-8").splitlines()
+
+    matched_keys: set[str] = set()
+    new_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                new_lines.append(f"{key}={updates[key]}")
+                matched_keys.add(key)
+                continue
+        new_lines.append(line)
+
+    for key, value in updates.items():
+        if key not in matched_keys:
+            new_lines.append(f"{key}={value}")
+
+    _ENV_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    for key, value in updates.items():
+        os.environ[key] = value
+    return len(updates)
+
+
 @lru_cache(maxsize=None)
 def core_config() -> Dict[str, Any]:
     """Core.json (非敏感) + .env (敏感) 合并配置。
