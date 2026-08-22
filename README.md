@@ -2,7 +2,7 @@
 
 > 多源新闻智能抓取与翻译阅读 —— CLI + **Web 后端**(FastAPI / PostgreSQL / Redis / SSE)
 
-![Version](https://img.shields.io/badge/version-0.2.5-blue)
+![Version](https://img.shields.io/badge/version-0.2.6-blue)
 ![License](https://img.shields.io/badge/license-Apache_2.0-green)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
@@ -18,7 +18,7 @@
 - **Web 后端 API**:登录鉴权(JWT + 角色)、管理面板、任务运行时(ThreadPoolExecutor 4 并发)、定时抓取、统一 `{success, data, error}` 契约、`/docs` 交互文档
 - **SSE 进度通道**:抓取/简报任务实时进度,Redis 历史事件断线重放(无轮询降级);前端使用 fetch + ReadableStream 解析 SSE
 - **简报系统**:LLM 分类(政治/经济/文化/科技)+ 中文标题 + 摘要 + 分类综述;抓取完成可仅针对本次新增文章自动生成简报;降级链路(403 风控/服务错误两分)、取消=原子不落库、全挂 failed 残料保留;支持批量为所有未简报文章生成简报
-- **统计信息**:抓取任务页文章按天/按源统计;简报任务页简报概览/按天/按源统计;横向柱状图可视化
+- **统计信息**:抓取任务页文章概览/按天/按源统计;简报任务页简报概览/按天/按源统计;横向柱状图可视化;未简报文章实时计数
 - **敏感字段 `.env` 管理**:JWT secret、管理员凭据、DB DSN、Redis password、LLM 凭据、CORS origins 等全部从 `.env` 加载,`Config/*.json` 不含敏感值
 
 ## 架构
