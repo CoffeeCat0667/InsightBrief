@@ -5,6 +5,7 @@ import { esc, fmtDateTime } from "../util.js";
 const TAB_LABELS = {
   articles: "文章",
   brief: "简报",
+  brief_tasks: "简报任务",
   crawl: "抓取任务",
   sources: "新闻源",
 };
@@ -93,7 +94,7 @@ export async function adminView(root) {
 
   // ---- 非管理员选项卡 ----
   const chipBox = root.querySelector("#tab-chips");
-  const chosen = new Set(["articles", "brief"]);
+  const chosen = new Set(["articles", "brief", "brief_tasks"]);
   chipBox.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
     c.classList.toggle("active");
     if (c.classList.contains("active")) chosen.add(c.dataset.tab);
