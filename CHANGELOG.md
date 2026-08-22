@@ -41,6 +41,43 @@ InsightBrief 0.2.0：Web 产品化能力、管理能力、定时抓取与无 Has
 - 管理面板用户新增/重名冲突/自己删除保护/最后管理员保护/引用用户软禁用/无引用硬删验证。
 - LLM probe 成功/失败路径验证，失败时不写配置。
 
+## [Ver0.2.7] - 2026-08-22
+
+InsightBrief 0.2.7：安全加固（buglist 高危项修复）+ 简报进度条实时更新 + 文章筛选修复。
+
+### 修复
+
+- **ADM-1 (P1)**：`delete_admin_user` 联合检查 `CrawlTask`/`BriefTask`/`CrawlSchedule` 三表外键引用，有引用时走软禁用而非硬删，避免 `IntegrityError` 500。
+- **AUTH-1 (P1)**：`verify_dummy_password` 统一使用 `_password_bytes` + 相同 `b"\x00"*72` fallback，与 `verify_password` 计时特征一致，消除用户名枚举侧信道。
+- **GUARD-1 (P2)**：`_Guard.touch` 语义修正 — `ok=True` 时计数器归零优先于 `service_error` 递增，消除潜在语义 Bug。
+- **BCRYPT-1 (P3)**：`auth.py` 注册 + `admin.py` 创建/更新用户，`hash_password` 调用包裹 `try/except ValueError`，返回 422 + 审计记录。
+- **文章筛选失效**：`articles.js` 补充 `#f-source` change 和 `#f-cat` chip 点击事件监听；搜索模式也传递 `category` 参数。
+- **简报任务详情 500**：`Brief` 模型补充 `items` relationship（`cascade delete` + `seq` 排序）。
+- **简报概览 422**：前端调用 `/api/briefs/stats-overview` 修正为 `/api/brief-tasks/stats-overview`。
+
+### 新增
+
+- **简报进度条实时更新**：
+  - `OperatorContext` 新增 `on_progress` 回调。
+  - 分类阶段：每批次完成后回调（0% → 20%）。
+  - 摘要阶段：`_ProgressCounter` 原子计数器，每篇文章完成后回调（20% → 70%）。
+  - 综述阶段：按分类逐个回调（70% → 90%）。
+- **抓取统计概览**：`GET /api/articles/stats-overview` 返回总数 + Top 20 来源。
+- **未简报文章计数**：`GET /api/brief-tasks/pending-count` 返回未生成简报的文章数。
+- **简报按源统计下拉框**：输入框改为下拉选择器，与抓取任务 UI 一致。
+
+### 变更
+
+- 版本号升至 `0.2.7`（README badge、CHANGELOG 标题）。
+
+### 验证
+
+- Python `compileall`、全量 JS `node --check`、`git diff --check`。
+- ADM-1：创建用户 → 建简报任务 → 删除用户 → 软禁用非报错。
+- AUTH-1：不存在用户登录与存在用户登录计时特征一致。
+- GUARD-1：`touch(ok=True)` 始终归零。
+- BCRYPT-1：超长密码注册返回 422 + 审计记录。
+
 ## [Ver0.2.6] - 2026-08-22
 
 InsightBrief 0.2.6：统计概览面板、未简报文章计数、简报统计 bug 修复。

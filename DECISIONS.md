@@ -1,7 +1,7 @@
 # 架构决策记录 (ARCHITECTURE DECISIONS)
 
-> **日期**: 2026-08-22 Ver0.2.6 发布复核
-> **状态**: 持续更新(Ver0.2.6 决策已落地)
+> **日期**: 2026-08-22 Ver0.2.7 发布复核
+> **状态**: 持续更新(Ver0.2.7 决策已落地)
 > **范围**: 面向 Web 后端化改造的已确认决策, 只记录结论, 不涉及代码实现。
 
 ---
@@ -46,6 +46,17 @@
 | §0.2.6-1 | 抓取统计是否需要概览模式？ | **新增概览 tab** | `GET /api/articles/stats-overview` 返回总数 + Top20 来源；前端与简报概览风格一致 |
 | §0.2.6-2 | 未简报文章数量如何展示？ | **实时计数 + 复选框旁显示** | `GET /api/brief-tasks/pending-count` 返回计数；前端渲染在复选框文本中 |
 | §0.2.6-3 | 简报按源统计输入方式？ | **改为下拉选择器** | 与抓取任务按源统计 UI 一致；避免名称拼写错误；数据源复用 `sources` 数组 |
+
+---
+
+## Ver0.2.7 已确认决策
+
+| 编号 | 问题 | 决策 | 影响 |
+|---|---|---|---|
+| §0.2.7-1 | 删除用户时外键引用检查范围？ | **联合检查 CrawlTask/BriefTask/CrawlSchedule 三表** | 有引用时走软禁用，避免 RESTRICT FK 导致 IntegrityError 500 |
+| §0.2.7-2 | 登录侧信道消除策略？ | **verify_dummy_password 统一 _password_bytes + 相同 fallback** | 与 verify_password 使用相同 bcrypt 路径，计时特征一致 |
+| §0.2.7-3 | Guard 语义修正？ | **ok=True 归零优先于 service_error 递增** | 消除潜在语义 Bug，当前调用点不受影响 |
+| §0.2.7-4 | 超长密码处理？ | **hash_password 包裹 try/except ValueError → 422 + 审计** | auth.py 注册 + admin.py 创建/更新均覆盖 |
 
 ---
 

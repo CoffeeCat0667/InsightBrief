@@ -2,7 +2,7 @@
 
 > 多源新闻智能抓取与翻译阅读 —— CLI + **Web 后端**(FastAPI / PostgreSQL / Redis / SSE)
 
-![Version](https://img.shields.io/badge/version-0.2.6-blue)
+![Version](https://img.shields.io/badge/version-0.2.7-blue)
 ![License](https://img.shields.io/badge/license-Apache_2.0-green)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
