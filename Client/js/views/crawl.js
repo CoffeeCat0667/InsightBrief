@@ -1,5 +1,6 @@
 // 抓取任务: 创建(源多选/max_items/国内占比) + SSE 实时进度 + 任务历史/详情/取消
 import { api, toastErr, toastOk, toastWarn } from "../api.js";
+import { isAdmin } from "../router.js";
 import { streamEvents } from "../sse.js";
 import { esc, fmtDateTime, statusBadge, pager } from "../util.js";
 
@@ -45,6 +46,7 @@ export async function crawlView(root) {
       </div>
     </div>
 
+    ${isAdmin() ? `
     <div class="card" style="margin-bottom:16px">
       <div class="section-title" style="margin-top:0">定时任务</div>
       <div class="field-row">
@@ -66,7 +68,7 @@ export async function crawlView(root) {
         <span id="schedule-empty" class="schedule-empty">暂无定时任务</span>
       </div>
       <div id="schedule-list"><div class="skeleton" style="height:50px"></div></div>
-    </div>
+    </div>` : ""}
 
     <div id="live-panel" class="card hidden" style="margin-bottom:16px"></div>
 
@@ -151,8 +153,10 @@ export async function crawlView(root) {
     try { await api.post("/api/crawl-schedules", body); toastOk("定时任务已创建，将立即执行首次抓取"); loadSchedules(); }
     catch (e) { toastErr(e.message); }
   }
-  root.querySelector("#create-schedule").addEventListener("click", createSchedule);
-  loadSchedules();
+  if (isAdmin()) {
+    root.querySelector("#create-schedule").addEventListener("click", createSchedule);
+    loadSchedules();
+  }
 
   // ---- SSE 实时进度 ----
   let ac = null;

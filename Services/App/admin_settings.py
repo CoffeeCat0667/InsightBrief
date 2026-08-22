@@ -18,8 +18,8 @@ _REGISTRATION_KEY = "registration"
 _TABS_KEY = "non_admin_tabs"
 _LLM_KEY = "llm"
 
-ALL_TABS = ("articles", "brief", "crawl", "sources")
-DEFAULT_NON_ADMIN_TABS = ("articles", "brief")
+ALL_TABS = ("articles", "brief", "brief_tasks", "crawl", "sources")
+DEFAULT_NON_ADMIN_TABS = ("articles", "brief", "brief_tasks")
 
 
 class LLMProbeError(RuntimeError):
