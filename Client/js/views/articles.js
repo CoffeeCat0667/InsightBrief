@@ -36,13 +36,32 @@ export async function articlesView(root) {
   const pagerEl = root.querySelector("#article-pager");
   const search = () => { state.page = 1; render(); };
 
+  root.querySelector("#kw").addEventListener("input", debounce(() => {
+    state.kw = root.querySelector("#kw").value.trim();
+    search();
+  }, 300));
+
+  root.querySelector("#f-source").addEventListener("change", () => {
+    state.source = root.querySelector("#f-source").value;
+    search();
+  });
+
+  root.querySelectorAll("#f-cat .chip").forEach((c) =>
+    c.addEventListener("click", () => {
+      root.querySelectorAll("#f-cat .chip").forEach((x) => x.classList.remove("active"));
+      c.classList.add("active");
+      state.cat = c.dataset.cat;
+      search();
+    })
+  );
+
   async function render() {
     listEl.innerHTML = `<div class="skeleton" style="height:70px;margin-bottom:12px"></div><div class="skeleton" style="height:70px;margin-bottom:12px"></div>`;
     try {
       let page;
       if (state.kw) {
         page = await api.get("/api/articles/search", {
-          keyword: state.kw, source_id: state.source || undefined, page: state.page, page_size: PAGE_SIZE,
+          keyword: state.kw, source_id: state.source || undefined, category: state.cat || undefined, page: state.page, page_size: PAGE_SIZE,
         });
       } else {
         page = await api.get("/api/articles", {

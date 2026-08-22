@@ -91,6 +91,7 @@ def search_articles(
     keyword: str,
     in_original: bool = True,
     source_id: Optional[str] = None,
+    category: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
     session: Session = Depends(get_db),
@@ -108,6 +109,8 @@ def search_articles(
     stmt = select(Article).where(cond)
     if source_id:
         stmt = stmt.where(Article.source_id == source_id)
+    if category:
+        stmt = stmt.where(Article.category == category)
     return ok(_page_of(session, stmt, page, page_size))
 
 
