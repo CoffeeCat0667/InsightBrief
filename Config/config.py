@@ -101,6 +101,13 @@ def core_config() -> Dict[str, Any]:
     }
     data["auth"]["jwt_expire_seconds"] = expire
     data["web"]["disable_docs"] = bool(data["web"]["disable_docs"])
+
+    # ── CORS: 从 .env 读取逗号分隔的允许域名列表 ──
+    cors_raw = os.environ.get("IB_CORS_ORIGINS", "")
+    data["web"]["cors_origins"] = [
+        o.strip() for o in cors_raw.split(",") if o.strip()
+    ] if cors_raw else ["*"]
+
     return data
 
 

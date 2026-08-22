@@ -70,7 +70,7 @@ def create_brief_task(
 
     try:
         manager.dispatch(task.id, brief_processor, kind="brief")
-    except RuntimeError:
+    except Exception:
         write_audit(
             user_id=user.id,
             action="brief_task.create",

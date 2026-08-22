@@ -3,6 +3,12 @@ const TOKEN_KEY = "ib_token";
 const USER_KEY = "ib_user";
 const TABS_KEY = "ib_tabs";
 
+function _escHtml(s) {
+  const d = document.createElement("div");
+  d.appendChild(document.createTextNode(s));
+  return d.innerHTML;
+}
+
 export const store = {
   get token() { return localStorage.getItem(TOKEN_KEY) || ""; },
   get user() {
@@ -27,7 +33,7 @@ export function toast(msg, kind = "info", ms = 3200) {
   const root = document.getElementById("toast-root");
   const el = document.createElement("div");
   el.className = `toast ${kind}`;
-  el.innerHTML = `<span>${msg}</span>`;
+  el.innerHTML = `<span>${_escHtml(msg)}</span>`;
   root.appendChild(el);
   setTimeout(() => {
     el.style.opacity = "0";

@@ -77,7 +77,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 开发期全放行; 生产按前端域名收紧
+    allow_origins=core_config()["web"]["cors_origins"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
