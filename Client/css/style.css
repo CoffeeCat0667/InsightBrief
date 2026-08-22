@@ -105,10 +105,7 @@ button { font-family: inherit; }
 .brand-mark {
   width: 34px; height: 34px;
   border-radius: 9px;
-  background: linear-gradient(135deg, var(--accent), var(--cat-culture));
-  color: #fff; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  letter-spacing: 0.5px;
+  object-fit: contain;
 }
 .brand-name { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
 .side-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -292,7 +289,7 @@ td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
   animation: toast-in 0.3s ease;
 }
 .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-.auth-brand .brand-mark { width: 44px; height: 44px; font-size: 18px; border-radius: 12px; }
+.auth-brand .brand-mark { width: 44px; height: 44px; border-radius: 12px; }
 .auth-brand h1 { font-size: 20px; }
 .auth-brand p { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
 .tabs { display: flex; background: var(--bg-soft); border-radius: 10px; padding: 4px; margin-bottom: 20px; gap: 4px; }

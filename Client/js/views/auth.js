@@ -5,7 +5,7 @@ export async function authView(root) {
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand">
-        <span class="brand-mark">IB</span>
+        <img class="brand-mark" src="/ICON_Transparent.png" alt="IB">
         <div>
           <h1>InsightBrief</h1>
           <p>新闻采集 · 自动翻译 · AI 简报</p>
